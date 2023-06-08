@@ -2,7 +2,10 @@ source("scripts/analysis/Full_function.R")
 pkgs <- c("sampling","tidyverse", "terra", "sf", "foreach", "doParallel", "units","ggpattern")
 invisible(lapply(pkgs, library, character.only = T))
 boundaries <- st_read("data/masks/cleaned/med_bps_hex.shp")
-
+#boundaries_chunk2 <- boundaries %>%
+#  mutate(hex_ID = as.numeric(hex_ID))%>%
+  # filter(hex_ID < 1000)%>%
+  # mutate(hex_ID = as.character(hex_ID))
 
 med_hex_analysis <- Calculate_fire_regime_and_departure("data/landscape_data/LF2020_BPS_220_CONUS/tif/LC20_BPS_220.tif",
                                                         "data/landscape_data/LF2020_BPS_220_CONUS/CSV_data/LF20_BPS_220.csv",
@@ -12,6 +15,6 @@ med_hex_analysis <- Calculate_fire_regime_and_departure("data/landscape_data/LF2
                                                         "data/outputs/med_hex",
                                                         "hex_ID",
                                                         write_year_raster_out = T,
-                                                        n.cores = 1,
+                                                        n.cores = 6,
                                                         n.iter = 100)
 #med_hex_analysis

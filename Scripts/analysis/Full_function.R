@@ -16,7 +16,8 @@ Calculate_fire_regime_and_departure <- function(bps_rast_path,
                                                 buffer_tune = -150,
                                                 colors2 = RColorBrewer::brewer.pal(5, "RdYlBu")[c(5,2)],
                                                 n.lines = 30,
-                                                alpha.lines = .1){
+                                                alpha.lines = .1,
+                                                write_individual_gz = FALSE){
  bps <- rast(bps_rast_path)
  bps_csv <- read_csv(bps_csv_path)
 if(class(mask_polygon_path)[1] == "sf"){
@@ -94,8 +95,15 @@ stored_data <- foreach(i = 1:length(mask_units), .export = c("mask_all","fire_pa
     
     year_ids <- list(year = all_years, IDs = NULL)
     
+    year_pattern <- paste0(all_years, "_30m.tif")
+    year_files <- list.files(yearly_rasters_folder, paste0(year_pattern,collapse = "|"))
+    if(write_year_raster_out == TRUE & length(all_years) == length(year_files)){
+      check_fires <- TRUE
+    }else{
+      check_fires <- FALSE
+    }
     
-    if(write_year_raster_out == T ){
+    if(write_year_raster_out == TRUE & check_fires ==FALSE ){
       create_yearly_rasters(list_names,
                             all_years,
                             dir_name,
@@ -513,13 +521,14 @@ stored_data <- foreach(i = 1:length(mask_units), .export = c("mask_all","fire_pa
     write.table(matrix(paste0("Completed ",current_date)), file = paste0(output_name,"/Completed_,",current_date,".txt"), append = F)
     
     
-    
-    save(individual_stats, file = paste0(output_name,"/",name_unit,"_stats.RData"))
-    gc()
+    if(write_individual_gz == TRUE){
+    saveRDS(individual_stats, file = paste0(output_name,"/",name_unit,"_stats.gz"))
+    }
+      gc()
       return(c(stat_df))
         }
 stopImplicitCluster()
 
-save(stored_data, file = paste0(output_path,"/stored_data.RData"))
+save(stored_data, file = paste0(output_path,"/!stored_data.RData"))
   return(stored_data)
 }

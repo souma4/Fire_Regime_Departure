@@ -62,7 +62,8 @@ production_figures_analysis <- function(data_list,masks,context_sf, output_path,
   
   
   valid_df <- production_pulling(valid_data) %>%
-    drop_na()
+    drop_na() %>%
+    distinct(name, .keep_all = T)
   valid_sf <- st_as_sf(left_join(valid_df, masks, by = "name"))
   #############
   ##############
@@ -78,7 +79,7 @@ production_figures_analysis <- function(data_list,masks,context_sf, output_path,
   summary_stats <- as.data.frame(rbind(means,vars,mins,meds,maxs))
   
   output <- list( stats = summary_stats)
-  saveRDS(output, file = paste0(out_file,"/!Summary_stats.RData"))
+  saveRDS(output, file = paste0(out_file,"/!Summary_stats.rds"))
   #############
   ##############
   #############   PLOTS
@@ -429,7 +430,7 @@ production_figures_analysis <- function(data_list,masks,context_sf, output_path,
     mutate(time = as_factor(time))
   
   cpal_abs <- c("#999999", "red")
-  abs_med <- data.frame(time = c("Historic", "Contemporary"),fri = c(meds[8],meds[7]), pbhs =c(meds[17],meds[16]), emd_both = c(0,meds[27]) )
+  abs_med <- data.frame(time = c("Historic", "Contemporary"),fri = c(meds[8],meds[7]), pbhs =c(meds[17],meds[16]), emd_both = c(0,meds[27]), emd_frequency = c(0,meds[25]), emd_severity = c(0,meds[26]) )
   abs_diff_plot <- full_join(fri_abs,pbhs_abs, by = c("name", "time"))%>%
     ggplot(aes(x=fri, y = pbhs, color = time))+
     geom_point()+
@@ -456,7 +457,7 @@ production_figures_analysis <- function(data_list,masks,context_sf, output_path,
     #  mutate(hexcolor =  rgb(r,g,b, maxColorValue = 255)) %>%
     ggplot(aes(x=cubeRoot,y = pbhs, color = time, size = time))+
     geom_point()+
-    geom_point(aes(x=fri, y = pbhs, color = time), data = dep_med, size = 6)+
+    geom_point(aes(x=fri, y = pbhs), data = dep_med, size = 6)+
     geom_text(x= dep_med$fri[2],y = (dep_med$pbhs[2]-.05), label = "Median", color = "black", show.legend = F)+
     scale_size_manual(values = c(6, 2))+
     scale_color_manual(values = cpal_abs)+
@@ -510,6 +511,39 @@ production_figures_analysis <- function(data_list,masks,context_sf, output_path,
                                       linewidth = .1)
     )
   ggsave("freqPbhs_depEmd_plot.pdf",dep_diff_emd_plot,"pdf",out_file, 1,1920,1080,units = "px", 150)
+  
+  
+
+  freqEmd_dep_plot <-full_join(fri_departure, pbhs_departure, by = c("name", "time")) %>%
+    mutate(cubeRoot = sign(fri)*abs(fri)^(1/3))%>%
+    left_join(emd_4plot, by = c("name","time")) %>%
+    
+    ggplot(aes(x=cubeRoot,y = emd_frequency,color = time, size = time))+
+    geom_point()+
+    geom_point(aes(x=fri, y = emd_frequency), data = dep_med, size = 6)+
+    geom_text(x= dep_med$fri[2],y = (dep_med$emd_frequency[2]-.05), label = "Median", color = "black", show.legend = F)+
+    
+    scale_size_manual(values = c(6, 2))+
+    scale_color_manual(values = cpal_abs)+
+    scale_x_continuous(breaks = c(-5,0,5,10,15,20),
+                       minor_breaks = c(0.001))+
+    scale_y_continuous(minor_breaks = 0.001)+
+    labs(
+         x = expression("FRI"^(1/3)),
+         y = "EMD"
+    )+
+    theme_bw()+
+    theme(legend.title = element_blank(),
+          panel.grid.major = element_blank(),
+          panel.grid.minor = element_line(color = "grey70",
+                                          linewidth = .1))
+  ggsave("freqEmd_dep_plot.pdf",freqEmd_dep_plot,"pdf",out_file, 1,1920,1080,units = "px", 150)
+  
+  
+  
+  
+  
+  
   
   
    
