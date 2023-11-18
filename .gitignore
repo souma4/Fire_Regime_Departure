@@ -1,0 +1,17 @@
+*.tif
+*.Rhistory
+*.RData
+*.Ruserdata
+.Rproj.user
+*.pdf
+*.png
+*.jpg
+*.jl
+*.svg
+.vscode*
+*.sh
+test_julia/*
+Figures/*
+*.sh
+*.xml
+*.gpkg

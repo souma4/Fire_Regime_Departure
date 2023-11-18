@@ -19,7 +19,7 @@ plot(vect(states_subset))
 st_write(states_subset, "data/masks/cleaned/wna_states.shp")
 
 mtbs <- st_read("data/landscape_data/mtbs_perims/mtbs_perims_DD.shp")
-fire_str <- strsplit(t$Event_ID,'')
+fire_str <- strsplit(mtbs$Event_ID,'')
 fire_year <- foreach(j = 1:length(fire_str), .errorhandling = "pass", .combine = "c") %do%{
   year <- paste(fire_str[[j]][14:17],collapse = "")
   return(year)
@@ -41,7 +41,10 @@ bps_polygon_code <- as.polygons(bps_wna_1km,dissolve =T)
 bps_polygon_code_sv <- aggregate(bps_polygon_code, by = "BPS_CODE")%>%
   subset(BPS_CODE != -9999 & BPS_CODE != -1111 & BPS_CODE != 11
          & BPS_CODE != 12  & BPS_CODE != 31, NSE = T) 
-names(bps_polygon_code_sv)[1] <- "DipsN"
+names(bps_polygon_code_sv)[1] <- "DispN"
+
+
+
 
 bps_polygon_code_sf <- st_as_sf(bps_polygon_code)%>%
   group_by(BPS_CODE)%>%
@@ -49,7 +52,8 @@ bps_polygon_code_sf <- st_as_sf(bps_polygon_code)%>%
   drop_na()%>%
   filter(BPS_CODE != -9999 & BPS_CODE != -1111 & BPS_CODE != 11
          & BPS_CODE != 12  & BPS_CODE != 31) %>%
-  mutate(DispN = as.character(BPS_CODE), BPS_CODE = NULL)
+  mutate(DispN = as.character(BPS_CODE), BPS_CODE = NULL) %>%
+  right_join(.,bps_csv_group_veg, by = join_by("DispN" == "BPS_MODEL"))
 st_write(bps_polygon_code_sf,"data/masks/cleaned/bps_code.shp")
 
 
@@ -85,7 +89,7 @@ st_write(bps_polygon_models_sf,"data/masks/cleaned/bps_models.shp")
 #hexes
 ##parks et al 2015
 
-##average bps_model
+##average bps_model hex
 bps_polygon_models_sv <- vect("data/masks/cleaned/bps_models.shp")
 bps_polygon_areas <- expanse(bps_polygon_models_sv, unit = "km", transform = T)
 ave_model_area <- set_units(mean(bps_polygon_areas),"km^2")
@@ -112,15 +116,60 @@ med_hex_valid <- med_hex[med_hex_valid_index,]
 st_write(ave_hex_valid,"data/masks/cleaned/ave_bps_hex.shp", append = F)
 st_write(med_hex_valid,"data/masks/cleaned/med_bps_hex.shp", append = F)
 
+####average bps_model grid
+bps_polygon_models_sv <- vect("data/masks/cleaned/bps_models.shp")
+bps_polygon_areas <- expanse(bps_polygon_models_sv, unit = "m", transform = T)
+ave_model_area <- set_units(mean(bps_polygon_areas),"m^2")
+med_model_area <- set_units(median(bps_polygon_areas), "m^2")
+states_wna <- vect("data/masks/cleaned/wna_states.shp")%>%
+  project(crs(bps_polygon_models_sv))
 
+
+states_wna_ext <- ext(states_wna)
+
+
+resolute <- floor(sqrt(med_model_area))
+states_wna_ext[1]<- states_wna_ext[1]-as.numeric(resolute)-(abs(states_wna_ext[2]-states_wna_ext[1]) %%as.numeric(resolute))
+states_wna_ext[4]<- states_wna_ext[4]+as.numeric(resolute)-(abs(states_wna_ext[4]-states_wna_ext[3]) %%as.numeric(resolute))
+
+
+med_hex_grid_r <- rast(states_wna, crs = crs(states_wna), ext = states_wna_ext, res = resolute, vals = T)
+med_hex_grid_r_index <- as.data.frame(med_hex_grid_r, xy = T, cells = T) %>%
+                        dplyr::select(x,y,cell)%>%
+                        rename(index = cell)%>%
+                        rast(.,type = "xyz", crs = crs(states_wna), ext = states_wna_ext)
+med_hex_grid_poly <- as.polygons(med_hex_grid_r_index)
+
+
+states_wna_ext <- ext(states_wna)
+resolute <- floor(sqrt(ave_model_area))
+states_wna_ext[1]<- states_wna_ext[1]-as.numeric(resolute)-(abs(states_wna_ext[2]-states_wna_ext[1]) %%as.numeric(resolute))
+states_wna_ext[4]<- states_wna_ext[4]+as.numeric(resolute)-(abs(states_wna_ext[4]-states_wna_ext[3]) %%as.numeric(resolute))
+
+ave_hex_grid_r <- rast(states_wna, crs = crs(states_wna), ext = states_wna_ext, res = resolute, vals = T)
+ave_hex_grid_r_index <- as.data.frame(ave_hex_grid_r, xy = T, cells = T) %>%
+  dplyr::select(x,y,cell)%>%
+  rename(index = cell)%>%
+  rast(.,type = "xyz", crs = crs(states_wna), ext = states_wna_ext)
+ave_hex_grid_poly <- as.polygons(ave_hex_grid_r_index)
+
+
+
+writeVector(ave_hex_grid_poly,"data/masks/cleaned/ave_bps_grid.shp", overwrite=T)
+writeVector(med_hex_grid_poly,"data/masks/cleaned/med_bps_grid.shp", overwrite=T)
 
 ####firesheds
-fireshed <- st_read("data/masks/raw/firesheds/Data/Firesheds_CONUS.gdb", layer = "Firesheds")%>%
-  st_transform(st_crs(states_wna))%>%
-  st_intersection(states_wna)
+fireshed <- st_read("data/masks/raw/firesheds/Data/Firesheds_CONUS.gdb", layer = "Firesheds") %>%
+  vect() %>%
+  project(crs(states_wna))%>%
+  crop(states_wna)
 st_write(fireshed, "data/masks/cleaned/firesheds.gpkg")
-project_areas <- st_read('data/masks/raw/firesheds/Data/Firesheds_CONUS.gdb', layer = "ProjectAreas")%>%
-  st_transform(st_crs(states_wna))%>%
-  st_intersection(states_wna)
-st_write(project_areas, "data/masks/cleaned/fs_project_areas.gpkg", delete_layer = T)
+project_areas <- st_read("data/masks/raw/firesheds/Data/Firesheds_CONUS.gdb", layer = "ProjectAreas") %>%
+  vect() %>%
+  project(crs(states_wna))%>%
+  crop(states_wna)
+
+
+writeVector(fireshed, "data/masks/cleaned/fs_fireshed.gpkg", overwrite = T)
+writeVector(project_areas, "data/masks/cleaned/fs_project_areas.gpkg", overwrite = T)
 

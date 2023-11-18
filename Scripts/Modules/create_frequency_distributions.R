@@ -2,39 +2,51 @@ pkgs <- c("tidyverse")
 invisible(lapply(pkgs, library, character.only = T))
 
 source("scripts\\modules\\simulation_functions.R")
+#This function creates frequency distributions
+create_frequency_distributions <- function(contemporary_sample_freq, #this iterations extraced contemporary frequencies
+                                           historical_sample #this iterations sampled historical data
+                                           ){
 
-create_frequency_distributions <- function(contemporary_sample_freq,
-                                           historical_sample){
-
-
-
-
-#freq
-historical_sample_bps <- historical_sample %>%
-  group_by(BPS_CODE) %>%
-  summarise(n = n()) %>%
-  mutate(relfreq = n/sum(n))
-
-#  class_dat <- historical_sample %>%
-#    rowwise %>%
-#    mutate(class = class_select(PRC_SURFAC, PRC_MIXED, PRC_REPLAC)) %>%
-#    mutate(freq = Fire_freq(class, FRI_SURFAC, FRI_MIXED, FRI_REPLAC)) %>% ###tweak this to meet your year range.
-#    mutate(sev = Fire_sev(class)) %>%
-#    ungroup()
-
+ 
+#create simulated fire frequencies for historical data
 historical_sample_freq <<- historical_sample %>%
   mutate(freq = fire_freq_binom(FRI_ALLFIR))%>%
   ungroup()
 
 
 
-
+#clean data so that it's only freq and where it comes from
 contemporary_freq <<- contemporary_sample_freq %>% dplyr::select(freq)%>%mutate(time = "Contemporary")
-historical_freq <<- historical_sample_freq %>% dplyr::select( freq) %>% mutate(time = "Historical")
+historical_freq <<- historical_sample_freq %>% dplyr::select(freq) %>% mutate(time = "Historical")
+
+#bind the two datasets then convert to relative frequency distribtions
 freq_dat <<- rbind(contemporary_freq, historical_freq)%>%
   mutate(time = fct_relevel(time,c("Historical","Contemporary"))) %>%
   group_by(time, freq) %>%
   summarise(n = n())%>%
   mutate(relfreq = n/sum(n))
 
+
+
+}
+
+#this creates normalized frequency values from raw frequencies, freq_dat_norm asks whether you want the combined fire frequencies
+normalize_frequency <- function(historical_freq, contemporary_freq, freq_dat_norm = T){
+  hist_mean <- mean(historical_freq$freq, na.rm = T)
+  
+    hist_sd <- sd(historical_freq$freq, na.rm = T)
+  if(is.na(hist_sd)){
+    return("Error: no historical variance")
+  }
+  
+  contemporary_freq_norm <<- contemporary_freq %>% 
+    mutate(freq = (freq-hist_mean)/hist_sd)
+  historical_freq_norm <<- historical_freq %>% 
+    mutate(freq = (freq-hist_mean)/hist_sd)
+  if (freq_dat_norm == T){
+  freq_dat <<- freq_dat %>% 
+    mutate(freq = (freq-hist_mean)/hist_sd)
+  
+  }
+  return("Passed")
 }

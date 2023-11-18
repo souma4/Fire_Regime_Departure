@@ -5,20 +5,26 @@ library(tidyverse)
 library(foreach)
 
 valid_regions <- c(2,3,4,7,10,11,12,13,15,18,19,21,22,23,24,27,28)
-mtbs <- st_read("C:\\Users\\JChandler\\Desktop\\Work\\Masters\\data\\landscape_data\\mtbs_perims\\mtbs_cleaned.shp")
+ecoregions <- st_read("E:\\severity.1985.2000\\tnc_ecoregions.shp") %>%
   filter(Region_ID %in% valid_regions)
+mtbs <- st_read("C:\\Users\\JChandler\\Desktop\\Work\\Masters\\Fire_Regime_Departure\\data\\landscape_data\\mtbs_perims\\mtbs_cleaned.shp")
+  
 ### region_folders
 for(i in 1:dim(ecoregions)[1]){
   id <- ecoregions$Region_ID[i]
   region_folder <- paste0("E:\\severity.1985.2000\\r",id)
   fires <- unlist(list.files(region_folder, pattern = "_CBI_bc.tif"))
+  fires_ndvi <- unlist(list.files(region_folder, pattern = "_pre_ndvi.tif"))
   fire_str <- strsplit(fires,'')
   foreach(j = 1:length(fire_str), .errorhandling = "pass", .combine = "c") %do%{
     year <- paste(fire_str[[j]][14:17],collapse = "")
     fire_name <- fires[j]
+    fire_name_ndvi <- fires_ndvi[j]
     fire <- rast(paste0(region_folder,"/",fire_name))
+    fire_ndvi <- rast(paste0(region_folder,"/",fire_name_ndvi))
     out_folder <- paste0("data/all_fires/",year,"/")
-    writeRaster(fire,paste0(out_folder,fire_name),overwrite=T)
+    # writeRaster(fire,paste0(out_folder,fire_name),overwrite=F)
+    writeRaster(fire_ndvi,paste0(out_folder,fire_name_ndvi),overwrite=T)
     return(j)
   }
   
@@ -27,13 +33,17 @@ for(i in 1:dim(ecoregions)[1]){
   ####additional folders
     region_folder <- "E:\\severity.1985.2000\\additional_fires"
     fires <- unlist(list.files(region_folder, pattern = "_CBI_bc.tif"))
+    fires_ndvi <- unlist(list.files(region_folder, pattern = "_pre_ndvi.tif"))
     fire_str <- strsplit(fires,'')
     foreach(j = 1:length(fire_str), .errorhandling = "pass", .combine = "c") %do%{
       year <- paste(fire_str[[j]][14:17],collapse = "")
       fire_name <- fires[j]
+      fire_name_ndvi <- fires_ndvi[j]
       fire <- rast(paste0(region_folder,"/",fire_name))
+      fire_ndvi <- rast(paste0(region_folder,"/",fire_name_ndvi))
       out_folder <- paste0("data/all_fires/",year,"/")
-      writeRaster(fire,paste0(out_folder,fire_name),overwrite=T)
+      # writeRaster(fire,paste0(out_folder,fire_name),overwrite=F)
+      writeRaster(fire_ndvi,paste0(out_folder,fire_name_ndvi),overwrite=T)
       return(j)
     }
     
