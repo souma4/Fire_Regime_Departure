@@ -8,13 +8,10 @@ st_write(wildernesses, "data/masks/cleaned/wilderness_cleaned.shp", append = F)
 
 states <- st_read("data/masks/raw/na_states_aea.shp")
 
-ecoregions <- st_read("data/masks/cleaned/tnc_ecoregions.shp")
-ecoregions_cleaned <- ecoregions %>% mutate(r_name = paste0("r",ECO_NUM))
-st_write(ecoregions_cleaned, "data/masks/cleaned/ecoregions_cleaned.shp", append = F)
-
 us_states <- states[45:dim(states)[1],]
-valid_states <- lengths(st_intersects(us_states,ecoregions)) > 0
-states_subset <- us_states[valid_states,]
+valid_codes <- c( "AZ", "CA", "CO",  "ID", "MT", "NM", "NV", "OR", "UT", "WA", "WY")
+# valid_states <- us_states$STATE_ABBR %in% valid_codes
+states_subset <- us_states %>% filter(CODE %in% valid_codes)
 plot(vect(states_subset))
 st_write(states_subset, "data/masks/cleaned/wna_states.shp")
 
