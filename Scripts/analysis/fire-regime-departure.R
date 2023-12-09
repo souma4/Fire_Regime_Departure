@@ -579,6 +579,9 @@ stored_data <- foreach(i = 1:length(mask_units), .export = c("mask_all","fire_pa
       
       
       
+      contemporary_relative_sev <- contemporary_sev_class[,.(n := .N, freq = n/sum(n)), by = .(sev)]
+      historical_relative_sev <- historical_sev_class[,.(n := .N, freq = n/sum(n)), by = .(sev)]
+      
       
       
       contemporary_relative_sev <- contemporary_sev_class %>%
@@ -750,6 +753,7 @@ stored_data <- foreach(i = 1:length(mask_units), .export = c("mask_all","fire_pa
       }
       
       #if we are at iterations below n.lines, then add our data to the initialized plots
+      #TODO
       if(completed.freq <=n.lines){
         freq_dat_4plot <- freq_dat %>%
           mutate( 
@@ -1072,6 +1076,14 @@ stored_data <- foreach(i = 1:length(mask_units), .export = c("mask_all","fire_pa
     
     
     #calulcate the relative frequencies of BPS models from our sample
+    bps_breakdown <- historical_subset_data[,.(n := .N, relfreq := n/sum(n)), by = .(BPS_MODEL)
+                                            ][,order(-relfreq)
+                                              ][, .I[1:10]] |>
+                                                merge(_,historical_subset_data, on = .(BPS_MODEL), all.x = T) |>
+                                                unique(_, by = "BPS_MODEL")
+    
+   
+    
     bps_breakdown <- historical_subset_data %>%
       dplyr::group_by(BPS_MODEL) %>%
       dplyr::summarize(n = n()) %>%

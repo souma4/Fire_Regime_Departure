@@ -11,14 +11,16 @@ sample_pixels <- function(iteration = 1, #Number of the iteration. This indexes 
 srs_cells <- srs[,iteration] #grab the iteration of srs
 
 #Filter to the valid cells for this iteration among all dataframes
+contemporary_sample_freq <<- contemporary_data_freq[ID %in% srs_cells, !c("x","y")]
 contemporary_sample_freq <<- contemporary_data_freq %>%
   filter(ID %in% srs_cells) %>%
   dplyr::select(-one_of("x","y"))
-
+contemporary_sample_sev <<- contemporary_data_sev[ID %in% srs_cells, !c("x","y")]
 contemporary_sample_sev <<- contemporary_data_sev %>%
   filter(ID %in% srs_cells) %>%
   dplyr::select(-one_of("x","y")) 
 
+historical_sample <<- historical_data[ID %in% srs_cells]
 historical_sample <<- historical_data%>%
   filter(ID %in% srs_cells)
 }

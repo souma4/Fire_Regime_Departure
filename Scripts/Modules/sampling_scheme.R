@@ -1,6 +1,6 @@
 #THIS SCRIPT FILTERS OUR DATA FOR ALL ITERATIONS AND PULLS THE RELEVANT STATISTICS OUT. PRIMARY PLACE TO FURTHER OPTIMIZE
 #load in packages
-pkgs <- c("terra","sf","tidyverse") 
+pkgs <- c("terra","sf","tidyverse", "data.table") 
 invisible(lapply(pkgs, library, character.only = T))
 #create the sampling scheme
 Sampling_scheme <- function(bps_mask, #a spatRaster masked by your location of interest, in this case BPS masked to a landscape unit
@@ -33,7 +33,8 @@ frame <- rast(crs = crs(bps_mask), ext = ext(bps_mask), vals = 1, resolution = 3
 activeCat(bps_mask) <- 9
 BPS_reclass <- bps_mask %>%
                 as.data.frame(xy = T)%>%
-                filter(FRI_ALLFIR != "NA")%>%
+                as.data.table()
+BPS_reclass <- BPS_reclass[FRI_ALLFIR != "NA"] %>%
                 rast(type = "xyz", crs = crs(bps_mask), ext = ext(bps_mask))
 ext.2 <-  BPS_reclass* frame 
 
@@ -46,7 +47,8 @@ ext.2 <- classify(ext.2, matrix(c(0,NA),ncol= 2), others = T)
 }
 #convert to data Frame
 frame_domain <- as.data.frame(ext.2, cells = T, xy = T, na.rm = T)%>%
-  dplyr::select(cell, x, y)
+  as.data.table()
+frame_domain <- frame_domain[,.(cell, x, y)]
 
 
 #generate frequency map as global spatRast
@@ -65,17 +67,17 @@ srs <<- replicate(n.iter, sample(frame_domain$cell, sample.size))
 #optimization step. find unique cells, then only extract and join once. Extracts are really slow and it's better to perform one large extract than many smaller ones
 unique.cells <- sort(unique(as.vector(srs)))
 
-frame_domain_subset <- frame_domain %>% filter(cell %in% unique.cells)
+frame_domain_subset <- frame_domain[cell %in% unique.cells]
 rm(frame_domain)
 
-contemporary_subset_data_sev <<- terra::extract(raster_stack,vect(frame_domain_subset, geom = c("x","y")), xy = T) %>%
-  mutate(ID = frame_domain_subset$cell) 
+contemporary_subset_data_sev <<- as.data.table(terra::extract(raster_stack,vect(frame_domain_subset, geom = c("x","y")), xy = T))[,ID := frame_domain_subset$cell,]
 
 
 
-contemporary_subset_data_freq <<- terra::extract(freq_map, vect(frame_domain_subset, geom = c("x","y")),xy = T) %>%
-  mutate(ID = frame_domain_subset$cell) %>%
-  rename(freq = sum)
+
+contemporary_subset_data_freq <<- as.data.table(terra::extract(freq_map, vect(frame_domain_subset, geom = c("x","y")),xy = T))[,ID := frame_domain_subset$cell,]
+colnames(contemporary_subset_data_freq)[colnames(contemporary_subset_data_freq) == "sum"] <- "freq"
+
 # END CONTEMPORARY SAMPLING
 
 
@@ -84,23 +86,26 @@ contemporary_subset_data_freq <<- terra::extract(freq_map, vect(frame_domain_sub
 # codes <- terra::extract(bps_mask,vect(frame_domain_subset, geom = c("x","y")), xy =T)
 # codes$BPS_CODE <- as.numeric(as.character(codes$BPS_CODE))
 activeCat(bps_mask) <- 2
-zones <-terra::extract(bps_mask,vect(frame_domain_subset, geom = c("x","y")))
+zones <-as.data.table(terra::extract(bps_mask,vect(frame_domain_subset, geom = c("x","y"))))
+setKey(zones, ON = ID)
 activeCat(bps_mask) <- 3
-models <-terra::extract(bps_mask,vect(frame_domain_subset, geom = c("x","y")))
-
+models <-as.data.table(terra::extract(bps_mask,vect(frame_domain_subset, geom = c("x","y"))))
+setKey(models, ON = ID)
 rm(bps_mask)
 
 #join the relevant codes
 # hist_dat_full <- full_join(codes, zones, by = "ID") %>%             
 #   full_join(., models, by = "ID") %>%
 #   mutate(ID = frame_domain_subset$cell)
-hist_dat_full <- full_join(zones, models, by = "ID") %>%
-  mutate(ID = frame_domain_subset$cell)
+hist_dat_full <- merge(zones, models, all = TRUE)[, ID := frame_domain_subset$cell,]
+#hist_dat_full <- full_join(zones, models, by = "ID") %>%
+#  mutate(ID = frame_domain_subset$cell)
 #rm(codes, zones, models)
 rm( zones, models)
 
 # historical_subset_data <<- left_join(hist_dat_full, bps_csv, by =c("BPS_CODE", "ZONE", "BPS_MODEL"),
 #                                      copy = TRUE)
+historical_subset_data <<- bps_csv[hist_dat_full, on = c("ZONE", "BPS_MODEL")]
 historical_subset_data <<- left_join(hist_dat_full, bps_csv, by =c( "ZONE", "BPS_MODEL"),
                                                                            copy = TRUE)
 

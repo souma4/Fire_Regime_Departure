@@ -9,17 +9,27 @@ create_frequency_distributions <- function(contemporary_sample_freq, #this itera
 
  
 #create simulated fire frequencies for historical data
-historical_sample_freq <<- historical_sample %>%
+  historical_sample_freq <<- historical_sample[, freq := fire_freq_binom(FRI_ALLFIR)]
+  historical_sample_freq <<- historical_sample %>%
   mutate(freq = fire_freq_binom(FRI_ALLFIR))%>%
   ungroup()
 
 
 
 #clean data so that it's only freq and where it comes from
-contemporary_freq <<- contemporary_sample_freq %>% dplyr::select(freq)%>%mutate(time = "Contemporary")
+  
+  contemporary_freq <<- contemporary_sample_freq[,freq,][,time := "Contemporary"]
+  historical_freq <<- historical_sample_freq[,freq,][,time := "Historical"]
+  
+  
+  contemporary_freq <<- contemporary_sample_freq %>% dplyr::select(freq)%>%mutate(time = "Contemporary")
 historical_freq <<- historical_sample_freq %>% dplyr::select(freq) %>% mutate(time = "Historical")
 
 #bind the two datasets then convert to relative frequency distribtions
+freq_dat <<- rbind(contemporary_freq, historical_freq)[,time := fct_relevel(time,c("Historical","Contemporary"))][
+  ,n := .N, .(time, freq)][
+    ,relfreq := n/sum(n)] 
+
 freq_dat <<- rbind(contemporary_freq, historical_freq)%>%
   mutate(time = fct_relevel(time,c("Historical","Contemporary"))) %>%
   group_by(time, freq) %>%
@@ -38,8 +48,16 @@ normalize_frequency <- function(historical_freq, contemporary_freq, freq_dat_nor
   if(is.na(hist_sd)){
     return("Error: no historical variance")
   }
+    contemporary_freq_norm <<- contemporary_freq[,freq := (freq-hist_mean)/hist_sd]
+    historical_freq_norm <<- historical_freq[, freq := (freq-hist_mean)/hist_sd]
+    if (freq_dat_norm == T){
+      freq_dat <<- freq_dat[,freq := (freq-hist_mean)/hist_sd]
+      
+    }
   
-  contemporary_freq_norm <<- contemporary_freq %>% 
+    
+    
+    contemporary_freq_norm <<- contemporary_freq %>% 
     mutate(freq = (freq-hist_mean)/hist_sd)
   historical_freq_norm <<- historical_freq %>% 
     mutate(freq = (freq-hist_mean)/hist_sd)
