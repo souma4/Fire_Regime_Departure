@@ -14,7 +14,7 @@ Sampling_scheme <- function(bps_mask, #a spatRaster masked by your location of i
                             ){
 #START OF FILTERING
 ##### creation of 30m template
-template<- rast(extent = ext( bps_mask),
+template <- rast(extent = ext( bps_mask),
                  res = 30, crs = crs(bps_mask), vals = T)
 
 
@@ -31,10 +31,11 @@ frame <- rast(crs = crs(bps_mask), ext = ext(bps_mask), vals = 1, resolution = 3
 ##### creating valid pixels to draw from. This filters out invalid BPS pixels
 
 activeCat(bps_mask) <- 9
-BPS_reclass <- bps_mask %>%
-                as.data.frame(xy = T)%>%
+BPS_reclass <- bps_mask |>
+                as.data.frame(xy = T) |>
                 as.data.table()
 BPS_reclass <- BPS_reclass[FRI_ALLFIR != "NA"] %>%
+                as.data.frame() %>%
                 rast(type = "xyz", crs = crs(bps_mask), ext = ext(bps_mask))
 ext.2 <-  BPS_reclass* frame 
 
@@ -46,22 +47,22 @@ ext.2 <- classify(ext.2, matrix(c(0,NA),ncol= 2), others = T)
 
 }
 #convert to data Frame
-frame_domain <- as.data.frame(ext.2, cells = T, xy = T, na.rm = T)%>%
+frame_domain <- as.data.frame(ext.2, cells = T, xy = T, na.rm = T) %>%
   as.data.table()
-frame_domain <- frame_domain[,.(cell, x, y)]
+frame_domain[,.(cell, x, y)]
 
 
 #generate frequency map as global spatRast
-freq_map <<- sum(raster_stack > 0, na.rm = T) %>%
+freq_map <- sum(raster_stack > 0, na.rm = T) %>%
   classify(matrix(c(NA,0),ncol = 2))
-#freq_map <<- rasterize(perims, ext.2, fun = "sum") #generate frequency map as spatVect *NOTE: does not remove pixels that we filtered out in prior steps!! may overestimate fire frequency
+#freq_map <- rasterize(perims, ext.2, fun = "sum") #generate frequency map as spatVect *NOTE: does not remove pixels that we filtered out in prior steps!! may overestimate fire frequency
 
 #generate global sample size
-sample.size <<- trunc(dim(frame_domain)[1] * proportion)
+sample.size <- trunc(dim(frame_domain)[1] * proportion)
 rm(ext.2)
 
 #draw random locations based on number of iterations and sample size
-srs <<- replicate(n.iter, sample(frame_domain$cell, sample.size))
+srs <- replicate(n.iter, sample(frame_domain$cell, sample.size))
 #END FILTERING
 #START OF CONTEMPORARY SAMPLING
 #optimization step. find unique cells, then only extract and join once. Extracts are really slow and it's better to perform one large extract than many smaller ones
@@ -70,13 +71,14 @@ unique.cells <- sort(unique(as.vector(srs)))
 frame_domain_subset <- frame_domain[cell %in% unique.cells]
 rm(frame_domain)
 
-contemporary_subset_data_sev <<- as.data.table(terra::extract(raster_stack,vect(frame_domain_subset, geom = c("x","y")), xy = T))[,ID := frame_domain_subset$cell,]
+contemporary_subset_data_sev <- as.data.table(terra::extract(raster_stack,vect(frame_domain_subset, geom = c("x","y")), xy = T))[,ID := frame_domain_subset$cell,]
 
 
 
 
-contemporary_subset_data_freq <<- as.data.table(terra::extract(freq_map, vect(frame_domain_subset, geom = c("x","y")),xy = T))[,ID := frame_domain_subset$cell,]
-colnames(contemporary_subset_data_freq)[colnames(contemporary_subset_data_freq) == "sum"] <- "freq"
+contemporary_subset_data_freq <- as.data.table(terra::extract(freq_map, vect(frame_domain_subset, geom = c("x","y")),xy = T))[,ID := frame_domain_subset$cell,
+                                                                                                                               ][,`:=`(freq  = sum, sum = NULL)]
+
 
 # END CONTEMPORARY SAMPLING
 
@@ -87,10 +89,10 @@ colnames(contemporary_subset_data_freq)[colnames(contemporary_subset_data_freq) 
 # codes$BPS_CODE <- as.numeric(as.character(codes$BPS_CODE))
 activeCat(bps_mask) <- 2
 zones <-as.data.table(terra::extract(bps_mask,vect(frame_domain_subset, geom = c("x","y"))))
-setKey(zones, ON = ID)
+setkey(zones, ON = ID)
 activeCat(bps_mask) <- 3
 models <-as.data.table(terra::extract(bps_mask,vect(frame_domain_subset, geom = c("x","y"))))
-setKey(models, ON = ID)
+setkey(models, ON = ID)
 rm(bps_mask)
 
 #join the relevant codes
@@ -103,12 +105,19 @@ hist_dat_full <- merge(zones, models, all = TRUE)[, ID := frame_domain_subset$ce
 #rm(codes, zones, models)
 rm( zones, models)
 
-# historical_subset_data <<- left_join(hist_dat_full, bps_csv, by =c("BPS_CODE", "ZONE", "BPS_MODEL"),
+# historical_subset_data <- left_join(hist_dat_full, bps_csv, by =c("BPS_CODE", "ZONE", "BPS_MODEL"),
 #                                      copy = TRUE)
-historical_subset_data <<- bps_csv[hist_dat_full, on = c("ZONE", "BPS_MODEL")]
-historical_subset_data <<- left_join(hist_dat_full, bps_csv, by =c( "ZONE", "BPS_MODEL"),
-                                                                           copy = TRUE)
+historical_subset_data <- bps_csv[hist_dat_full, on = c("ZONE", "BPS_MODEL")]
+# historical_subset_data <- left_join(hist_dat_full, bps_csv, by =c( "ZONE", "BPS_MODEL"),
+#                                                                            copy = TRUE)
 
 #END HISTORICAL SAMPLING
+output <- list(freq_map = freq_map,
+               sample.size = sample.size,
+               srs = srs,
+               contemporary_subset_data_sev = contemporary_subset_data_sev,
+               contemporary_subset_data_freq = contemporary_subset_data_freq,
+               historical_subset_data = historical_subset_data)
+return(output)
 
 }

@@ -1,4 +1,5 @@
-pkgs <- c("tidyverse","transport")
+#pkgs <- c("tidyverse","transport")
+pkgs <- c("data.table", "transport")
 invisible(lapply(pkgs, library, character.only = T))
 
 
@@ -10,35 +11,37 @@ emd_Calculation  <- function(contemporary_dat,historical_dat, freq ){
   
   if(freq == T){
     #creates bins from unique fire frequencies
-    unique_values <- c(contemporary_dat$freq,historical_dat$freq) %>%
-                      unique() %>%
+    unique_values <- c(contemporary_dat$freq,historical_dat$freq) |>
+                      unique() |>
                       sort()
     
     dx <- unique_values[2]-unique_values[1] 
     bins <- seq(min(unique_values),max(unique_values), dx)
     #creates relative frequency distributions
-    fi <- contemporary_dat[,n := .N, by = .(freq)][
-      ,.(bin := freq, rel, freq := NULL)
-    ]
-    mi <- historical_dat[,n := .N, by = .(freq)][
-      ,.(bin := freq, rel, freq := NULL)
-    ]
+    fi <- copy(contemporary_dat)[,.N, by = .(freq)
+                                  ][, rel := N/sum(N)
+                                    ][,`:=`(bin = freq, freq = NULL)
+                                      ][,.(bin,rel)]
+    mi <- copy(historical_dat)[,.N, by = .(freq)
+                                ][, rel := N/sum(N)
+                                  ][,`:=`(bin = freq, freq = NULL)
+                                    ][,.(bin,rel)]
     
     
-    fi <- contemporary_dat %>% 
-      group_by(freq) %>%
-      summarise(n = n()) %>%
-      mutate(rel = n/sum(n)) %>%
-      dplyr::select(freq,rel) %>%
-      rename(bin = freq)
-   
-    mi <- historical_dat %>%
-      group_by(freq) %>%
-      summarise(n=n()) %>%
-      mutate(rel = n/sum(n)) %>%
-      dplyr::select(freq, rel) %>%
-      rename(bin = freq)
-    
+    # fi <- contemporary_dat %>% 
+    #   group_by(freq) %>%
+    #   summarise(n = n()) %>%
+    #   mutate(rel = n/sum(n)) %>%
+    #   dplyr::select(freq,rel) %>%
+    #   rename(bin = freq)
+    # 
+    # mi <- historical_dat %>%
+    #   group_by(freq) %>%
+    #   summarise(n=n()) %>%
+    #   mutate(rel = n/sum(n)) %>%
+    #   dplyr::select(freq, rel) %>%
+    #   rename(bin = freq)
+    # 
     
   }else{
   #if severity is being calculated
@@ -46,63 +49,59 @@ emd_Calculation  <- function(contemporary_dat,historical_dat, freq ){
   bins = sort(unique(seq(min(round(c(contemporary_dat$sev,historical_dat$sev),2)),max(round(c(contemporary_dat$sev,historical_dat$sev),2)), length = 16)))
   bin_dt <- data.table(bin = bins[-1])[,index := 1:.N]
   
-  bin_df <- data.frame(bin = bins[-1])%>%
-    mutate( index = row_number())
+  # bin_df <- data.frame(bin = bins[-1])%>%
+  #   mutate( index = row_number())
   dx <- bins[2]-bins[1]
   #relative frequencies distributions for each fire severity bin
-  fi <- contemporary_dat[,bin := cut(sev, breaks = bins, labels = F, include.lowest = T)][
-    ,n = .N, by = .(bin)
-  ][
-    bin_dt, on = .(bin = index)
-  ][
-    , `=`(bin = ifelse(is.na(bin.y),0,bin.y), bin.y = NULL, rel = rel)
-  ]
+  fi <- copy(contemporary_dat)[,bin := cut(sev, breaks = bins, labels = F, include.lowest = T)
+                               ][,.N , by = .(bin)
+                                 ][, rel := N/sum(N)
+                                   ][bin_dt, on = .(bin = index)
+                                    ][, `:=`(bin = ifelse(is.na(i.bin),0,i.bin), i.bin = NULL, rel = rel)
+                                      ][,.(bin,rel)]
     
   
-  mi <- historical_dat[, bin = cut(sev, breaks = bins, labels = F)][
-    ,n = .N, by = .(bin)
-  ][
-    ,rel = n/sum(n)
-  ][
-    bin_dt, on = .(bin = index)
-  ][
-    , `=`(bin = ifelse(is.na(bin.y),0,bin.y), bin.y = NULL, rel = rel)
-  ]
+  mi <- copy(historical_dat)[,bin := cut(sev, breaks = bins, labels = F, include.lowest = T)
+                              ][,.N , by = .(bin)
+                                ][, rel := N/sum(N)
+                                  ][bin_dt, on = .(bin = index)
+                                    ][, `:=`(bin = ifelse(is.na(i.bin),0,i.bin), i.bin = NULL, rel = rel)
+                                      ][,.(bin,rel)]
   
   
   
   
-   fi <- contemporary_dat %>% 
-    mutate(bin = cut(sev, breaks = bins, labels = F, include.lowest = T)) %>%
-    group_by(bin) %>%
-    summarise(n = n()) %>%
-    mutate( rel = n/sum(n))%>% 
-    right_join(bin_df, by = join_by("bin" == "index")) %>%
-    dplyr::select(bin.y, rel) %>%
-    rename(bin = bin.y)%>%
-    mutate(bin = ifelse(is.na(bin),0,bin))
-  
-  mi <- historical_dat %>% 
-    mutate(bin = cut(sev, breaks = bins, labels = F)) %>%
-    group_by(bin) %>%
-    summarise(n = n()) %>%
-    mutate( rel = n/sum(n)) %>%
-    right_join(bin_df, by = join_by("bin" == "index")) %>%
-    dplyr::select(bin.y, rel) %>%
-    rename(bin = bin.y)%>%
-    mutate(bin = ifelse(is.na(bin),0,bin))
-  
+  #  fi <- contemporary_dat %>% 
+  #   mutate(bin = cut(sev, breaks = bins, labels = F, include.lowest = T)) %>%
+  #   group_by(bin) %>%
+  #   summarise(n = n()) %>%
+  #   mutate( rel = n/sum(n))%>% 
+  #   right_join(bin_df, by = join_by("bin" == "index")) %>%
+  #   dplyr::select(bin.y, rel) %>%
+  #   rename(bin = bin.y)%>%
+  #   mutate(bin = ifelse(is.na(bin),0,bin))
+  # 
+  # mi <- historical_dat %>% 
+  #   mutate(bin = cut(sev, breaks = bins, labels = F)) %>%
+  #   group_by(bin) %>%
+  #   summarise(n = n()) %>%
+  #   mutate( rel = n/sum(n)) %>%
+  #   right_join(bin_df, by = join_by("bin" == "index")) %>%
+  #   dplyr::select(bin.y, rel) %>%
+  #   rename(bin = bin.y)%>%
+  #   mutate(bin = ifelse(is.na(bin),0,bin))
+  # 
   }
   
   
   #join the datasets, input 0 for NA
-  emd_dt <- merge(fi, mi, on = .(bin), all = TRUE, suffixes = c(".fi",".mi"))
+  emd_dt <- merge.data.table(fi, mi, by = "bin", all = TRUE,  suffixes = c(".fi",".mi"), no.dups = F)
   emd_dt[is.na(emd_dt)] <- 0
   
-  emd_df <- full_join(fi,mi, by = "bin", suffix = c(".fi",".mi"))
-  emd_df[is.na(emd_df)] <- 0
+  # emd_df <- full_join(fi,mi, by = "bin", suffix = c(".fi",".mi"))
+  # emd_df[is.na(emd_df)] <- 0
   #Calculate EMD using transport::
-  emd <- wasserstein1d(emd_df$bin, emd_df$bin, 1, emd_df$rel.fi, emd_df$rel.mi)
+  emd <- wasserstein1d(emd_dt$bin, emd_dt$bin, 1, emd_dt$rel.fi, emd_dt$rel.mi)
   
   return(emd)
 }

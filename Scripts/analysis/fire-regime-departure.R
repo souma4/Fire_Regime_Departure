@@ -1,4 +1,6 @@
-pkgs <- c("foreach", "doParallel","sampling","tidyverse", "terra", "sf",  "units", "RColorBrewer","ggrepel")
+pkgs <- c("foreach", "doParallel","sampling","tidyverse", 
+          "terra", "sf",  "units", "RColorBrewer","ggrepel",
+          "data.table")
 invisible(lapply(pkgs, library, character.only = T))
 source("scripts/analysis/fire-regime-departure_helpers.R")
 
@@ -19,7 +21,7 @@ Calculate_fire_regime_and_departure <- function(bps_rast_path, #Path to your BPS
                                                 n.cores = 1, #number of cores you want to use for parallel computing. Defaults to non-parallel. This should NEVER be more than half of the logical processors on your device
                                                 p.area = 0.001, #proportion of each landscape you want to sample
                                                 n.iter = 100, #number of simulations to perform for each landscape
-                                                contemporary4historical = F, #niche use. Uses contemporary fires to estimate historical fire severity. IE "If it burned today, what would it have burned like in the past". use with caution
+                                                #contemporary4historical = F, #niche use. Uses contemporary fires to estimate historical fire severity. IE "If it burned today, what would it have burned like in the past". use with caution
                                                 ndvi_threshold = NA, #positive number to indicate which prefire NDVI you want to use to filter for pixels that burned in forest. Make sure your fire path folders contain pre_ndvi with the CBI_bc.tif files
                                                 buffer_tune = -150, #number to indicate a buffer around fire perims. We default to -150 to remove the outher 150 meters from fire perimeters (to asses the "core" of fires). Units are in meters
                                                 colors2 = RColorBrewer::brewer.pal(5, "RdYlBu")[c(5,2)], # colors for historical and contemporary comparative plots. Blue and Orange by default
@@ -29,7 +31,7 @@ Calculate_fire_regime_and_departure <- function(bps_rast_path, #Path to your BPS
                                                 ){
   #load in paths
  bps <- terra::rast(bps_rast_path)
- bps_csv <- readr::read_csv(bps_csv_path)
+ bps_csv <- data.table::fread(bps_csv_path)
  #Convert polygons to spatVectors of the correct projection
  if(class(mask_polygon_path)[1] == "SpatVector"){
    mask_all <- mask_polygon_path %>%
@@ -215,8 +217,8 @@ stored_data <- foreach(i = 1:length(mask_units), .export = c("mask_all","fire_pa
     }else{
       forestFilter_mask <- NULL
     }  
-    #samples pixels
-    Sampling_scheme(bps_mask, #landscape bps raster
+    #filters pixels
+    filter_data <- Sampling_scheme(bps_mask, #landscape bps raster
                     mask, #spatVect of landscape
                     perims, #perims for landscape
                     mosaic_stack_30m, #raster stack of yearly fire severities
@@ -227,11 +229,11 @@ stored_data <- foreach(i = 1:length(mask_units), .export = c("mask_all","fire_pa
                     )
      #create and write fire freq map
     freq_map_colorPalette <- rev(RColorBrewer::brewer.pal(9, "YlOrRd"))
-    freq_map_length <- terra::minmax(freq_map)[2]-terra::minmax(freq_map)[1]
+    freq_map_length <- terra::minmax(filter_data$freq_map)[2]-terra::minmax(filter_data$freq_map)[1]
     
     freq_map_colorPalette <- c("#787882",freq_map_colorPalette[1:freq_map_length])
-    coltab(freq_map)<-freq_map_colorPalette
-    writeRaster(freq_map, paste0(figure_folder,"/fire_frequency_map_",dir_name,".tiff"), filetype = "GTiff", overwrite = T)
+    coltab(filter_data$freq_map)<-freq_map_colorPalette
+    writeRaster(filter_data$freq_map, paste0(figure_folder,"/fire_frequency_map_",dir_name,".tiff"), filetype = "GTiff", overwrite = T)
     
     # 
     # pdf(file = paste0(figure_folder,"/frequency_map_",dir_name,".pdf"), width = 1920, height = 1080, pointsize = 20)
@@ -406,40 +408,43 @@ stored_data <- foreach(i = 1:length(mask_units), .export = c("mask_all","fire_pa
       }
       
       
-      #sample based on iteration
-       sample_pixels( k,
-                      contemporary_subset_data_sev,
-                      contemporary_subset_data_freq,
-                      historical_subset_data,
-                      srs)
+       #sample based on iteration
+       sampled <- sample_pixels( k,
+                      filter_data$contemporary_subset_data_sev,
+                      filter_data$contemporary_subset_data_freq,
+                      filter_data$historical_subset_data,
+                      filter_data$srs)
       #calculate proportion of FRG 1
-      frgs <- unlist(strsplit(historical_subset_data$FRG_NEW,"-"))
+      frgs <- unlist(strsplit(sampled$historical_sample$FRG_NEW,"-"))
       frg1s <- frgs[which(frgs == "I")]
       
       
-      proportion_FRGI[k] <-length(frg1s) / dim(historical_subset_data)[1]
+      proportion_FRGI[k] <-length(frg1s) / dim(sampled$historical_sample)[1]
       rm(frgs, frg1s)
       
       #Create frequency and severity distributions. estimate historical area burned
-      create_frequency_distributions (contemporary_sample_freq,
-                                      historical_sample)
-      historical_area_burned[k] <- ((sum(historical_freq$freq))*(30*30)/10000)/p.area
-      create_severity_distributions(historical_sample,
-                                    historical_sample_freq,
-                                    contemporary_sample_sev,
-                                    contemporary4historical = F,
-                                    k)
+      dfrequency <- create_frequency_distributions(sampled$contemporary_sample_freq,
+                                     sampled$historical_sample)
+      
+      historical_area_burned[k] <- ((sum(dfrequency$historical_freq$freq))*(30*30)/10000)/p.area
+      
+      severity <- create_severity_distributions(sampled$historical_sample,
+                                    sampled$contemporary_sample_sev,
+                                    #contemporary4historical = F,
+                                    k
+                                    #historical_sample,
+                                    )
      
         
       
       
       
       #checks that you have both severities [check]
-      if(length(historical_sev$sev)!=0 & length(contemporary_sev$sev)!= 0){
+      if(length(severity$historical_sev$sev)!=0 & length(severity$contemporary_sev$sev)!= 0){
           
         
-      emd_freq[k] <- emd_Calculation(contemporary_freq,historical_freq, freq = T )
-      emd_sev[k] <-  emd_Calculation(contemporary_sev,historical_sev, freq = F )
+      emd_freq[k] <- emd_Calculation(dfrequency$contemporary_freq,dfrequency$historical_freq, freq = T )
+      emd_sev[k] <-  emd_Calculation(severity$contemporary_sev,severity$historical_sev, freq = F )
       emd_combined[k] <- sqrt(emd_freq[k]^2+emd_sev[k]^2)
       
       
@@ -564,47 +569,51 @@ stored_data <- foreach(i = 1:length(mask_units), .export = c("mask_all","fire_pa
       # 
 
       
-      check_freq_norm <- normalize_frequency(historical_freq,
-                                      contemporary_freq,
+      check_freq_norm <- normalize_frequency(dfrequency$historical_freq,
+                                             dfrequency$contemporary_freq,
                            freq_dat_norm = normalize_plots)
-      check_sev_norm <- normalize_severity(historical_sev,
-                                    contemporary_sev,
+      check_sev_norm <- normalize_severity(severity$historical_sev,
+                                           severity$contemporary_sev,
                          combined_sev_norm = normalize_plots)
       
       
-      severity_average_contemporary_lst[k] <- mean(contemporary_sev$sev, na.rm = T)
-      severity_average_historical_lst[k] <- mean(historical_sev$sev, na.rm = T)
+      severity_average_contemporary_lst[k] <- mean(severity$contemporary_sev$sev, na.rm = T)
+      severity_average_historical_lst[k] <- mean(severity$historical_sev$sev, na.rm = T)
       
       
       
       
       
-      contemporary_relative_sev <- contemporary_sev_class[,.(n := .N, freq = n/sum(n)), by = .(sev)]
-      historical_relative_sev <- historical_sev_class[,.(n := .N, freq = n/sum(n)), by = .(sev)]
+      contemporary_relative_sev <- severity$contemporary_sev_class[,.N,  by = .(sev)
+                                                          ][,freq := N/sum(N)]
+      historical_relative_sev <- severity$historical_sev_class[,.N,  by = .(sev)
+                                                      ][,freq := N/sum(N)]
       
       
       
-      contemporary_relative_sev <- contemporary_sev_class %>%
-        group_by(sev) %>%
-        summarise(n = n())%>%
-        mutate(freq = n/sum(n))
-      historical_relative_sev <- historical_sev_class %>%
-        group_by(sev) %>%
-        summarise(n = n()) %>%
-        mutate(freq = n/sum(n))
+      # contemporary_relative_sev <- contemporary_sev_class %>%
+      #   group_by(sev) %>%
+      #   summarise(n = n())%>%
+      #   mutate(freq = n/sum(n))
+      # historical_relative_sev <- historical_sev_class %>%
+      #   group_by(sev) %>%
+      #   summarise(n = n()) %>%
+      #   mutate(freq = n/sum(n))
       
       
 
       
       
-      fri_contemporary[k] <- year_range/mean(contemporary_freq$freq)
-      fri_historical[k] <- year_range/mean(historical_freq$freq)
+      fri_contemporary[k] <- year_range/mean(dfrequency$contemporary_freq$freq)
+      fri_historical[k] <- year_range/mean(dfrequency$historical_freq$freq)
      
       
       pbhs_contemporary[k] <-as.numeric(contemporary_relative_sev %>%
+                                          as.data.frame() %>%
                                           filter(sev == "High")%>%
                                           dplyr::select(freq))
       pbhs_historical[k] <- as.numeric(historical_relative_sev %>%
+                                         as.data.frame() %>%
                                          filter(sev == "High")%>%
                                          dplyr::select(freq))
       #if we got normalized of both frequency and severity, then run otherwise, set to NA
@@ -753,9 +762,10 @@ stored_data <- foreach(i = 1:length(mask_units), .export = c("mask_all","fire_pa
       }
       
       #if we are at iterations below n.lines, then add our data to the initialized plots
-      #TODO
+      
       if(completed.freq <=n.lines){
-        freq_dat_4plot <- freq_dat %>%
+        freq_dat_4plot <- dfrequency$freq_dat %>%
+          as.data.frame() %>%
           mutate( 
             freq_start = ifelse(time == "Historical", freq-((freq[2]-freq[1])/2), freq),
             freq_end = ifelse(time == "Contemporary",freq+((freq[2]-freq[1])/2),freq)
@@ -773,9 +783,10 @@ stored_data <- foreach(i = 1:length(mask_units), .export = c("mask_all","fire_pa
        if(completed.sev <=n.lines){
          completed.sev <- completed.sev + 1
         sev_density <- sev_density + 
-          stat_density(aes(x = sev,  color = time),combined_sev, position = "identity",  geom = "line",alpha =alpha.lines)
+          stat_density(aes(x = sev,  color = time),severity$combined_sev, position = "identity",  geom = "line",alpha =alpha.lines)
         
-        freq_sev_each_4plot <-  combined_sev_class %>%
+        freq_sev_each_4plot <-  severity$combined_sev_class %>%
+          as.data.frame() %>%
           mutate(sev = as.numeric(sev), 
                  sev_start = ifelse(time == "Historical", sev-.5,sev),
                  sev_end = ifelse(time == "Contemporary",sev+.5,sev))
@@ -788,10 +799,11 @@ stored_data <- foreach(i = 1:length(mask_units), .export = c("mask_all","fire_pa
         
         
         
-        freq_sev_lm2h_4plot <-  combined_sev_class %>%
+        freq_sev_lm2h_4plot <-  severity$combined_sev_class %>%
+          as.data.frame() %>%
           mutate(sev = recode(sev, Low = "Low/Mixed", Mixed = "Low/Mixed"))%>%
           group_by(time, sev)%>%
-          summarize(n = sum(n), relfreq = sum(relfreq))%>%
+          summarize(n = sum(N), relfreq = sum(relfreq))%>%
           mutate(sev = as.numeric(sev), 
                  sev_start = ifelse(time == "Historical", sev-.5,sev),
                  sev_end = ifelse(time == "Contemporary",sev+.5,sev))
@@ -806,26 +818,24 @@ stored_data <- foreach(i = 1:length(mask_units), .export = c("mask_all","fire_pa
        }
       
       
-      rm(contemporary_sample_freq,historical_sample, historical_sample_freq,
-         contemporary_sample_sev, contemporary_freq,historical_freq,
-         contemporary_sev, historical_sev)
+      rm(dfrequency, severity)
       gc()
       } else{ #if we fail the check for contemporary severity data only do emd on frequency
-        emd_freq[k] <- emd_Calculation(contemporary_freq,historical_freq, freq = T )
+        emd_freq[k] <- emd_Calculation(dfrequency$contemporary_freq, dfrequency$historical_freq, freq = T )
         emd_sev[k] <- NA
         emd_combined[k] <- NA
         
         
         
-        fri_contemporary[k] <- year_range/mean(contemporary_freq$freq)
-        fri_historical[k] <- year_range/mean(historical_freq$freq)
+        fri_contemporary[k] <- year_range/mean(dfrequency$contemporary_freq$freq)
+        fri_historical[k] <- year_range/mean(dfrequency$historical_freq$freq)
         pbhs_contemporary[k] <-NA
         pbhs_historical[k] <- NA
         emd_sev_norm[k] <-  NA
         emd_combined_norm[k] <- NA
         
-        check_freq_norm <- normalize_frequency(historical_freq,
-                                          contemporary_freq,
+        check_freq_norm <- normalize_frequency(dfrequency$historical_freq,
+                                          dfrequency$contemporary_freq,
                                           freq_dat_norm = normalize_plots)
         
         
@@ -840,7 +850,7 @@ stored_data <- foreach(i = 1:length(mask_units), .export = c("mask_all","fire_pa
         
         }
         if(completed.freq <=n.lines){
-            freq_dat_4plot <- freq_dat %>%
+            freq_dat_4plot <- dfrequency$freq_dat %>%
               mutate( 
                 freq_start = ifelse(time == "Historical", freq-((freq[2]-freq[1])/2), freq),
                 freq_end = ifelse(time == "Contemporary",freq+((freq[2]-freq[1])/2),freq)
@@ -871,12 +881,12 @@ stored_data <- foreach(i = 1:length(mask_units), .export = c("mask_all","fire_pa
     emd_sev_norm_med <- quantile(emd_sev_norm,.5, names = F, na.rm = T)
     emd_combined_norm_med <- quantile(emd_combined_norm,.5, names = F, na.rm = T)
     
-    emd_freq_min <- min(emd_freq, na.rm = T)
-    emd_sev_min <- min(emd_sev, na.rm = T)
-    emd_combined_min <- min(emd_combined, na.rm = T)
-    emd_freq_norm_min <- min(emd_freq_norm, na.rm = T)
-    emd_sev_norm_min <- min(emd_sev_norm, na.rm = T)
-    emd_combined_norm_min <- min(emd_combined_norm, na.rm = T)
+    emd_freq_var <- var(emd_freq, na.rm = T)
+    emd_sev_var <- var(emd_sev, na.rm = T)
+    emd_combined_var <- var(emd_combined, na.rm = T)
+    emd_freq_norm_var <- var(emd_freq_norm, na.rm = T)
+    emd_sev_norm_var <- var(emd_sev_norm, na.rm = T)
+    emd_combined_norm_var <- var(emd_combined_norm, na.rm = T)
     
     proportion_FRGI_med <- quantile(proportion_FRGI, .5, names = F, na.rm = T)
     
@@ -966,19 +976,19 @@ stored_data <- foreach(i = 1:length(mask_units), .export = c("mask_all","fire_pa
                    
                    "percent severity departure",
                    
-                   "emd median frequency",
-                   "emd median severity",
-                   "emd median both",
-                   "emd median frequency normalized",
-                   "emd median severity normalized",
-                   "emd median both normalized",
+                   "emd frequency",
+                   "emd severity",
+                   "emd both",
+                   "emd frequency normalized",
+                   "emd severity normalized",
+                   "emd both normalized",
                    
-                   "emd minimum frequency",
-                   "emd minimum severity",
-                   "emd minimum both",
-                   "emd minimum frequency normalized",
-                   "emd minimum severity normalized",
-                   "emd minimum both normalized",
+                   "emd frequency var",
+                   "emd severity var",
+                   "emd both var",
+                   "emd frequency normalized var",
+                   "emd severity normalized var",
+                   "emd both normalized var",
                    
                    "FRCC freq dep",
                    "FRCC sev dep",
@@ -990,7 +1000,7 @@ stored_data <- foreach(i = 1:length(mask_units), .export = c("mask_all","fire_pa
     #statistics
     stats <- c(
       name_unit,
-      sample.size,
+      filter_data$sample.size,
       focal_area_ha,
       fire_area_ha, 
       proportion_burned, 
@@ -1032,12 +1042,12 @@ stored_data <- foreach(i = 1:length(mask_units), .export = c("mask_all","fire_pa
       emd_sev_norm_med ,
       emd_combined_norm_med,
       
-      emd_freq_min, 
-      emd_sev_min, 
-      emd_combined_min,
-      emd_freq_norm_min, 
-      emd_sev_norm_min ,
-      emd_combined_norm_min,
+      emd_freq_var, 
+      emd_sev_var, 
+      emd_combined_var,
+      emd_freq_norm_var, 
+      emd_sev_norm_var ,
+      emd_combined_norm_var,
       
       
       
@@ -1076,28 +1086,31 @@ stored_data <- foreach(i = 1:length(mask_units), .export = c("mask_all","fire_pa
     
     
     #calulcate the relative frequencies of BPS models from our sample
-    bps_breakdown <- historical_subset_data[,.(n := .N, relfreq := n/sum(n)), by = .(BPS_MODEL)
-                                            ][,order(-relfreq)
-                                              ][, .I[1:10]] |>
-                                                merge(_,historical_subset_data, on = .(BPS_MODEL), all.x = T) |>
-                                                unique(_, by = "BPS_MODEL")
+    bps_breakdown <- sampled$historical_sample[,.N,  by = .(BPS_MODEL)
+                                                  ][, relfreq := N/sum(N)
+                                                    ][order(-relfreq)
+                                                      ] |>
+                                                head(10) |>
+                                                        dplyr::left_join(x = _,y = bps_csv , by = "BPS_MODEL") |>
+                                                          dplyr::distinct(BPS_MODEL, .keep_all = T) %>%
+                                                          dplyr::select(all_of(c("BPS_CODE","ZONE",
+                                                                                 "BPS_MODEL","BPS_NAME",
+                                                                                 "relfreq")))
     
    
     
-    bps_breakdown <- historical_subset_data %>%
-      dplyr::group_by(BPS_MODEL) %>%
-      dplyr::summarize(n = n()) %>%
-      dplyr::mutate(relfreq = n/sum(n)) %>%
-      dplyr::arrange(desc(relfreq))%>%
-      head(.,10) %>%
-      dplyr::left_join(x = .,y = historical_subset_data , by = "BPS_MODEL")%>%
-      dplyr::distinct(BPS_MODEL, .keep_all = T) 
-      
+    # bps_breakdown <- historical_subset_data %>%
+    #   dplyr::group_by(BPS_MODEL) %>%
+    #   dplyr::summarize(n = n()) %>%
+    #   dplyr::mutate(relfreq = n/sum(n)) %>%
+    #   dplyr::arrange(desc(relfreq))%>%
+    #   head(.,10) %>%
+    #   dplyr::left_join(x = .,y = historical_subset_data , by = "BPS_MODEL")%>%
+    #   dplyr::distinct(BPS_MODEL, .keep_all = T) 
+    #   
     #stats for an individual landscape
     individual_stats <- list(stat_df,bps_breakdown,freq_compare_bar,sev_density,freq_sev_each,freq_sev_lm2h)
-    rm(freq_compare_bar, sev_density, freq_sev_each,freq_sev_lm2h,historical_subset_data,
-       contemporary_subset_data_freq, contemporary_subset_data_sev,srs,
-       contemporary_sample_sev, historical_sample,contemporary_sample_freq)
+    rm(freq_compare_bar, sev_density, freq_sev_each, freq_sev_lm2h,filter_data, sampled)
     
     stat_df <- list(stats = stat_df, top_bps_models = bps_breakdown)
     
@@ -1145,67 +1158,43 @@ valid_df <- production_pulling(valid_data) %>%
 
 #join valid data to our mask layer, create post hoc statistics
 valid_sf <- st_as_sf(left_join(valid_df, mask_sf, by = "name")) %>%
-  dplyr::mutate(emd_freq_median_cat = case_when(emd_median_frequency <= quantile(valid_df$emd_median_frequency, 0.33) ~ 'A',
-                                         emd_median_frequency > quantile(valid_df$emd_median_frequency, 0.33) & 
-                                           emd_median_frequency <= quantile(valid_df$emd_median_frequency, 0.66) ~ 'B',
-                                         emd_median_frequency > quantile(valid_df$emd_median_frequency, 0.66) ~ 'C'),
-         emd_sev_median_cat = case_when(emd_median_severity <= quantile(valid_df$emd_median_severity, 0.33) ~ '3',
-                                        emd_median_severity > quantile(valid_df$emd_median_severity, 0.33) & 
-                                          emd_median_severity <= quantile(valid_df$emd_median_severity, 0.66) ~ '2',
-                                        emd_median_severity > quantile(valid_df$emd_median_severity, 0.66) ~ '1'),
+  dplyr::mutate(emd_freq_cat = case_when(emd_frequency <= quantile(valid_df$emd_frequency, 0.33) ~ 'A',
+                                         emd_frequency > quantile(valid_df$emd_frequency, 0.33) & 
+                                           emd_frequency <= quantile(valid_df$emd_frequency, 0.66) ~ 'B',
+                                         emd_frequency > quantile(valid_df$emd_frequency, 0.66) ~ 'C'),
+         emd_sev_cat = case_when(emd_severity <= quantile(valid_df$emd_severity, 0.33) ~ '3',
+                                        emd_severity > quantile(valid_df$emd_severity, 0.33) & 
+                                          emd_severity <= quantile(valid_df$emd_severity, 0.66) ~ '2',
+                                        emd_severity > quantile(valid_df$emd_severity, 0.66) ~ '1'),
          
-         emd_freq_median_norm_cat = case_when(emd_median_frequency_normalized <= quantile(valid_df$emd_median_frequency_normalized, 0.33) ~ 'A',
-                                              emd_median_frequency_normalized > quantile(valid_df$emd_median_frequency_normalized, 0.33) & 
-                                                emd_median_frequency_normalized <= quantile(valid_df$emd_median_frequency_normalized, 0.66) ~ 'B',
-                                              emd_median_frequency_normalized > quantile(valid_df$emd_median_frequency_normalized, 0.66) ~ 'C'),
-         emd_sev_median_norm_cat = case_when(emd_median_severity_normalized <= quantile(valid_df$emd_median_severity_normalized, 0.33) ~ '3',
-                                             emd_median_severity_normalized > quantile(valid_df$emd_median_severity_normalized, 0.33) & 
-                                               emd_median_severity_normalized <= quantile(valid_df$emd_median_severity_normalized, 0.66) ~ '2',
-                                             emd_median_severity_normalized > quantile(valid_df$emd_median_severity_normalized, 0.66) ~ '1'),
+         emd_freq_norm_cat = case_when(emd_frequency_normalized <= quantile(valid_df$emd_frequency_normalized, 0.33) ~ 'A',
+                                              emd_frequency_normalized > quantile(valid_df$emd_frequency_normalized, 0.33) & 
+                                                emd_frequency_normalized <= quantile(valid_df$emd_frequency_normalized, 0.66) ~ 'B',
+                                              emd_frequency_normalized > quantile(valid_df$emd_frequency_normalized, 0.66) ~ 'C'),
+         emd_sev_norm_cat = case_when(emd_severity_normalized <= quantile(valid_df$emd_severity_normalized, 0.33) ~ '3',
+                                             emd_severity_normalized > quantile(valid_df$emd_severity_normalized, 0.33) & 
+                                               emd_severity_normalized <= quantile(valid_df$emd_severity_normalized, 0.66) ~ '2',
+                                             emd_severity_normalized > quantile(valid_df$emd_severity_normalized, 0.66) ~ '1'),
          
         
          #
          #
-         emd_freq_minimum_cat = case_when(emd_minimum_frequency <= quantile(valid_df$emd_minimum_frequency, 0.33) ~ 'A',
-                                          emd_minimum_frequency > quantile(valid_df$emd_minimum_frequency, 0.33) & 
-                                            emd_minimum_frequency <= quantile(valid_df$emd_minimum_frequency, 0.66) ~ 'B',
-                                          emd_minimum_frequency > quantile(valid_df$emd_minimum_frequency, 0.66) ~ 'C'),
-         emd_sev_minimum_cat = case_when(emd_minimum_severity <= quantile(valid_df$emd_minimum_severity, 0.33) ~ '3',
-                                         emd_minimum_severity > quantile(valid_df$emd_minimum_severity, 0.33) & 
-                                           emd_minimum_severity <= quantile(valid_df$emd_minimum_severity, 0.66) ~ '2',
-                                         emd_minimum_severity > quantile(valid_df$emd_minimum_severity, 0.66) ~ '1'),
-         
-         emd_freq_minimum_norm_cat = case_when(emd_minimum_frequency_normalized <= quantile(valid_df$emd_minimum_frequency_normalized, 0.33) ~ 'A',
-                                               emd_minimum_frequency_normalized > quantile(valid_df$emd_minimum_frequency_normalized, 0.33) & 
-                                                 emd_minimum_frequency_normalized <= quantile(valid_df$emd_minimum_frequency_normalized, 0.66) ~ 'B',
-                                               emd_minimum_frequency_normalized > quantile(valid_df$emd_minimum_frequency_normalized, 0.66) ~ 'C'),
-         emd_sev_minimum_norm_cat = case_when(emd_minimum_severity_normalized <= quantile(valid_df$emd_minimum_severity_normalized, 0.33) ~ '3',
-                                              emd_minimum_severity_normalized > quantile(valid_df$emd_minimum_severity_normalized, 0.33) & 
-                                                emd_minimum_severity_normalized <= quantile(valid_df$emd_minimum_severity_normalized, 0.66) ~ '2',
-                                              emd_minimum_severity_normalized > quantile(valid_df$emd_minimum_severity_normalized, 0.66) ~ '1'),
          
         
-         signed_emd_median_frequency_normalized = sign(pfrid)*emd_median_frequency_normalized,
-         signed_emd_median_frequency = sign(pfrid)*emd_median_frequency,
+         signed_emd_frequency_normalized = sign(pfrid)*emd_frequency_normalized,
+         signed_emd_frequency = sign(pfrid)*emd_frequency,
          
-         signed_emd_median_severity_normalized = sign(percent_severity_departure)*emd_median_severity_normalized,
-         signed_emd_median_severity= sign(percent_severity_departure)*emd_median_severity,
+         signed_emd_severity_normalized = sign(percent_severity_departure)*emd_severity_normalized,
+         signed_emd_severity= sign(percent_severity_departure)*emd_severity,
          
-         signed_emd_minimum_frequency_normalized = sign(pfrid)*emd_minimum_frequency_normalized,
-         signed_emd_minimum_frequency = sign(pfrid)*emd_minimum_frequency,
-         
-         signed_emd_minimum_severity_normalized = sign(percent_severity_departure)*emd_minimum_severity_normalized,
-         signed_emd_minimum_severity= sign(percent_severity_departure)*emd_minimum_severity
+        
          
          
          
   ) %>%
-  tidyr::unite('bicat_median', emd_freq_median_cat, emd_sev_median_cat) %>%
-  tidyr::unite('bicat_median_norm',emd_freq_median_norm_cat,emd_sev_median_norm_cat)%>%
-  dplyr::mutate('numcat_median' = as.numeric(factor(bicat_median)), 'numcat_median_norm' = as.numeric(factor(bicat_median_norm)))%>%
-  tidyr::unite('bicat_minimum', emd_freq_minimum_cat, emd_sev_minimum_cat) %>%
-  tidyr::unite('bicat_minimum_norm',emd_freq_minimum_norm_cat,emd_sev_minimum_norm_cat)%>%
-  dplyr::mutate('numcat_minimum' = as.numeric(factor(bicat_minimum)), 'numcat_minimum_norm' = as.numeric(factor(bicat_minimum_norm)))
+  tidyr::unite('bicat_median', emd_freq_cat, emd_sev_cat) %>%
+  tidyr::unite('bicat_norm',emd_freq_norm_cat,emd_sev_norm_cat)%>%
+  dplyr::mutate('numcat_median' = as.numeric(factor(bicat_median)), 'numcat_norm' = as.numeric(factor(bicat_norm)))
 
 terra::writeVector(terra::vect(valid_sf), filename = paste0(out_file,"/",vectorOutputName,".gpkg"), overwrite = T)
 
