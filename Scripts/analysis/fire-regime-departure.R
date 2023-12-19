@@ -14,8 +14,10 @@ Calculate_fire_regime_and_departure <- function(bps_rast_path, #Path to your BPS
                                                 output_path, #The folder you want outputs to be
                                                 display_name, #The column in your mask_polygon vector that you want to use for naming each area
                                                 vectorOutputName,
-                                                write_year_raster_out = F, # if true, writes yearly fires out to a created folder (output_path/mask_name/fires/...) IF no other fires exist or write_year_raster_overwrite = T if FALSE, doesn't write rasters
-                                                write_year_raster_overwrite = F, #if true forces the writing of yearly fire rasters for each landscape
+                                                write_year_raster_out = 'memory', # if true, writes yearly fires out to a created folder (output_path/mask_name/fires/...) IF no other fires exist or write_year_raster_overwrite = T if FALSE, doesn't write rasters
+                                                #if 'overwrite' is TRUE, will overwrite any existing rasters
+                                                #if 'memory' is TRUE, will create rasters in memory instead of disk
+                                                
                                                 forestFilter = NULL, #a filter for forested areas. if you want to filter to forested areas, put a binary nonforest/forest spatRast here
                                                 normalize_plots = F, #If you want plots that are normalized by historical mean and variance
                                                 n.cores = 1, #number of cores you want to use for parallel computing. Defaults to non-parallel. This should NEVER be more than half of the logical processors on your device
@@ -27,7 +29,8 @@ Calculate_fire_regime_and_departure <- function(bps_rast_path, #Path to your BPS
                                                 colors2 = RColorBrewer::brewer.pal(5, "RdYlBu")[c(5,2)], # colors for historical and contemporary comparative plots. Blue and Orange by default
                                                 n.lines = 30, #number of simulations to show in comparative plots. VERY RAM INTENSIVE
                                                 alpha.lines = .15, #Transparency of the lines from n.lines. I recommend something that allows rare events to look faded, but common event to look bold
-                                                write_individual_gz = FALSE #DONT MAKE THIS TRUE RIGHT NOW. CURRENT IMPLEMENTATION WRITES MASSIVE COMPRESSED RDATA (GZ) FILES AND WILL FILL YOUR HARDDRIVE WITH CLUTTER. Intent is to write the data indivudally for areas so you can load in only that landscapes data.
+                                                write_individual_gz = FALSE, #DONT MAKE THIS TRUE RIGHT NOW. CURRENT IMPLEMENTATION WRITES MASSIVE COMPRESSED RDATA (GZ) FILES AND WILL FILL YOUR HARDDRIVE WITH CLUTTER. Intent is to write the data indivudally for areas so you can load in only that landscapes data.
+                                                make_figures = TRUE #if you want to make figures
                                                 ){
   #load in paths
  bps <- terra::rast(bps_rast_path)
@@ -94,7 +97,10 @@ stored_data <- foreach(i = 1:length(mask_units), .export = c("mask_all","fire_pa
     name_unit <- mask_units[i]
     dir_name <- gsub(" ", "_", name_unit)
       output_name <- paste0(output_path,"/",dir_name)
-    dir.create(output_name, showWarnings = F)
+      if(write_year_raster_out != "memory" & make_figures == FALSE){
+        dir.create(output_name, showWarnings = F)
+      }
+    
     
 
     
@@ -114,8 +120,11 @@ stored_data <- foreach(i = 1:length(mask_units), .export = c("mask_all","fire_pa
     )
     if(inherits(perims, "error")){
       individual_stats <- list("No contemporary fire, cannot analyze")
+      
+      if(write_year_raster_out != "memory" & make_figures == FALSE){
       save(individual_stats, file = paste0(output_name,"/",name_unit,"_stats.RData"))
       write.table(matrix("Cannot Analyze"), file = paste0(output_name,"/CANT_ANALYZE.txt"), append = F)
+      }
       return(individual_stats)
 
     }
@@ -124,9 +133,12 @@ stored_data <- foreach(i = 1:length(mask_units), .export = c("mask_all","fire_pa
     yearly_rasters_folder <- paste0(output_name,"/fires")
     
     figure_folder <- paste0(output_name,"/figures")
+    if(write_year_raster_out != "memory"){
     dir.create(yearly_rasters_folder, showWarnings = F)
+    }
+    if(make_figures == TRUE){
     dir.create(figure_folder, showWarnings = F)
-    
+    }
     #unwrap and crop to our landscape of interest
     bps <- terra::unwrap(bps)
    bps_mask <- terra::crop(bps, mask, mask = T)
@@ -150,18 +162,14 @@ stored_data <- foreach(i = 1:length(mask_units), .export = c("mask_all","fire_pa
     #finds all files within the yearly raster folder.  VERIFIES WHETHER RASTERS HAVE ALREADY BEEN CREATED. IF TRUE AND OVERWRITE == FALSE THEN YOU WILL SKIP CREATING YEARLY RASTERS
     year_files <- list.files(yearly_rasters_folder, paste0(year_pattern,collapse = "|"))
     
-    if(write_year_raster_out == TRUE & length(all_years) == length(year_files)){
+    if((write_year_raster_out == TRUE & length(all_years) == length(year_files))| (write_year_raster_out == "memory")){
       check_fires <- TRUE
     }else{
       check_fires <- FALSE
     }
     
-    if(write_year_raster_overwrite == T){
-      check_fires <- FALSE
-    }
-    
     #IF we pass the logic checks, create yearly rasters
-    if(write_year_raster_out == TRUE & check_fires == FALSE ){
+    if(check_fires == FALSE ){
       check <- tryCatch(
         {
           create_yearly_rasters(list_names, #names with Event_ID, Fire_Year, and Tif
@@ -181,15 +189,30 @@ stored_data <- foreach(i = 1:length(mask_units), .export = c("mask_all","fire_pa
           })
       if(inherits(check, "error")){
         return(check)
-      }
+      } 
       
     }
+    if(write_year_raster_out == FALSE | write_year_raster_out == "overwrite" | write_year_raster_out == TRUE){
+        mosaic_stack_30m <- terra::rast(paste0(yearly_rasters_folder,"/",dir_name,"_",all_years,"_30m.tif"))
+      } else if(write_year_raster_out == 'memory'){
+        mosaic_stack_30m <- create_rasters_in_memory(list_names, #names with Event_ID, Fire_Year, and Tif
+                                                     all_years, #all the years to loop through
+                                                     buffer_sv, #spatVect of buffered perims
+                                                     bps_mask, # reference mask raster
+                                                     fire_path_folder, #path to fire folder
+                                                     ndvi_threshold #ndvi threshold. if below, remove
+        )
+      } else{
+        errorCondition("write_year_raster_out must be either TRUE, FALSE, overwrite, or memory")
+      }
+    names(mosaic_stack_30m) <- all_years
     rm(list_names)
     #create raster stack
-    mosaic_stack_30m <- terra::rast(paste0(yearly_rasters_folder,"/",dir_name,"_",all_years,"_30m.tif"))
+    #mosaic_stack_30m <- terra::rast(paste0(yearly_rasters_folder,"/",dir_name,"_",all_years,"_30m.tif"))
     #
     # create and write average severity map
     #
+    if(make_figures == TRUE){
     ave_sev <- terra::app(mosaic_stack_30m, mean, na.rm = T) %>%
       terra::crop(mask, mask = T)
     ave_sev_reclass <- matrix(c(0,low.thresh_median, 1,
@@ -201,15 +224,13 @@ stored_data <- foreach(i = 1:length(mask_units), .export = c("mask_all","fire_pa
     levels(ave_sev) <- data.frame(value = c(0,1,2,3),label = c("Unburned","Low","Mixed","High"))
     sev_map_colorPalette <- c("#006600","#00ffff", "#ffff00", "#ff0000")
     coltab(ave_sev) <- sev_map_colorPalette
-    
     writeRaster(ave_sev, paste0(figure_folder,"/average_severity_map_",dir_name,".tiff"), filetype = "GTiff", overwrite = T)
-    
+    }
     rm(ave_sev, sev_map_colorPalette)
     #
     #
     #
     
-    names(mosaic_stack_30m) <- all_years
     #then we need forestFilter for sampling
     if(!is.null(forestFilter)){
       forestFilter_mask <- terra::unwrap(forestFilter)%>%
@@ -228,6 +249,7 @@ stored_data <- foreach(i = 1:length(mask_units), .export = c("mask_all","fire_pa
                     forestFilter = forestFilter_mask #whether to filter forests
                     )
      #create and write fire freq map
+    if(make_figures == T){
     freq_map_colorPalette <- rev(RColorBrewer::brewer.pal(9, "YlOrRd"))
     freq_map_length <- terra::minmax(filter_data$freq_map)[2]-terra::minmax(filter_data$freq_map)[1]
     
@@ -256,8 +278,8 @@ stored_data <- foreach(i = 1:length(mask_units), .export = c("mask_all","fire_pa
          ))
     plot(mask, lwd = 2, add = T)
     dev.off()
-    
-   rm(bps_mask, freq_map,mosaic_stack_30m)
+    }
+   rm(bps_mask, mosaic_stack_30m)
     
    #prepare vectors for simulations
    emd_freq_norm <- vector(length = n.iter)
@@ -291,7 +313,10 @@ stored_data <- foreach(i = 1:length(mask_units), .export = c("mask_all","fire_pa
       if(k == 1){
         completed.freq <- 1
         completed.sev <- 1
-        if(normalize_plots == T){
+      }
+      if(k == 1 & make_figures == T){
+        
+        if(normalize_plots == T ){
           freq_compare_bar <- ggplot()+
             ggtitle(paste0(name_unit, " Frequency Bar Plot")) +
             xlab("# Fires in 35 Years")+
@@ -763,7 +788,7 @@ stored_data <- foreach(i = 1:length(mask_units), .export = c("mask_all","fire_pa
       
       #if we are at iterations below n.lines, then add our data to the initialized plots
       
-      if(completed.freq <=n.lines){
+      if(completed.freq <=n.lines & make_figures == TRUE){
         freq_dat_4plot <- dfrequency$freq_dat %>%
           as.data.frame() %>%
           mutate( 
@@ -780,7 +805,7 @@ stored_data <- foreach(i = 1:length(mask_units), .export = c("mask_all","fire_pa
       }
         
 
-       if(completed.sev <=n.lines){
+       if(completed.sev <=n.lines & make_figures == TRUE){
          completed.sev <- completed.sev + 1
         sev_density <- sev_density + 
           stat_density(aes(x = sev,  color = time),severity$combined_sev, position = "identity",  geom = "line",alpha =alpha.lines)
@@ -849,7 +874,7 @@ stored_data <- foreach(i = 1:length(mask_units), .export = c("mask_all","fire_pa
         emd_freq_norm[k] <- NA
         
         }
-        if(completed.freq <=n.lines){
+        if(completed.freq <=n.lines & make_figures == TRUE){
             freq_dat_4plot <- dfrequency$freq_dat %>%
               mutate( 
                 freq_start = ifelse(time == "Historical", freq-((freq[2]-freq[1])/2), freq),
@@ -1064,6 +1089,7 @@ stored_data <- foreach(i = 1:length(mask_units), .export = c("mask_all","fire_pa
     
     
     #finish figures with mean values, then save them
+    if(make_figures == T){
     mean_freq <- year_range/c(fri_historical_med,fri_contemporary_med)
    
     freq_compare_bar <- freq_compare_bar+
@@ -1083,7 +1109,7 @@ stored_data <- foreach(i = 1:length(mask_units), .export = c("mask_all","fire_pa
     
   
     ggsave(filename = paste0(figure_folder,"/Severity_class_lm2h_",dir_name,".pdf"),freq_sev_lm2h, width = 1280, height = 720, units = "px")
-    
+    }
     
     #calulcate the relative frequencies of BPS models from our sample
     bps_breakdown <- sampled$historical_sample[,.N,  by = .(BPS_MODEL)
@@ -1109,21 +1135,21 @@ stored_data <- foreach(i = 1:length(mask_units), .export = c("mask_all","fire_pa
     #   dplyr::distinct(BPS_MODEL, .keep_all = T) 
     #   
     #stats for an individual landscape
-    individual_stats <- list(stat_df,bps_breakdown,freq_compare_bar,sev_density,freq_sev_each,freq_sev_lm2h)
+    #individual_stats <- list(stat_df,bps_breakdown,freq_compare_bar,sev_density,freq_sev_each,freq_sev_lm2h)
     rm(freq_compare_bar, sev_density, freq_sev_each, freq_sev_lm2h,filter_data, sampled)
     
     stat_df <- list(stats = stat_df, top_bps_models = bps_breakdown)
     
     #mark of completion
     current_date <- Sys.Date()
-    
+    if(dir.exists(output_name)){
     unlink(paste0(output_name,"/",list.files(output_name, ".txt")))
     write.table(matrix(paste0("Completed ",current_date)), file = paste0(output_name,"/Completed_,",current_date,".txt"), append = F)
-    
-    #should write a GZ for each landscape but is super heavy and overflows storage
-    if(write_individual_gz == TRUE){
-    save(individual_stats, file = paste0(output_name,"/",name_unit,"_stats.gz"))
     }
+    #should write a GZ for each landscape but is super heavy and overflows storage
+    # if(write_individual_gz == TRUE){
+    # save(individual_stats, file = paste0(output_name,"/",name_unit,"_stats.gz"))
+    # }
       gc()
       return(c(stat_df)) #END OF LOOP
                        }
