@@ -1,3 +1,4 @@
+
 check_data <- function(data){
   out <- vector(length = length(data))
   for(i in 1:length(data)){
