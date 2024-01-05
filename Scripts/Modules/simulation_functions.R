@@ -1,24 +1,24 @@
 #creates simulation functions
 
 #calculated thresholds from calculated_thresholds.R I input these manually to save overhead cost
-low.thresh_low_bound = 1.33
-low.thresh_median = 1.56
-low.thresh_upper_bound = 1.72
-
-high.thresh_low_bound = 1.92
-high.thresh_median = 2.01
-high.thresh_upper_bound = 2.17
+ low.thresh_low_bound = 1.33
+ low.thresh_median = 1.56
+ low.thresh_upper_bound = 1.72
+ 
+ high.thresh_low_bound = 1.92
+ high.thresh_median = 2.01
+ high.thresh_upper_bound = 2.17
 
 
 # Comment these out for regular analysis
 #this is a sensitivity test based on thresholds from miller and thode 2007
-# low.thresh_low_bound  = 1.24
-# low.thresh_median = 1.24
-# low.thresh_upper_bound = 1.24
-# 
-# high.thresh_low_bound = 2.25
-# high.thresh_median = 2.25
-# high.thresh_upper_bound = 2.25
+ # low.thresh_low_bound  = 1.24
+ # low.thresh_median = 1.24
+ # low.thresh_upper_bound = 1.24
+ # 
+ # high.thresh_low_bound = 2.25
+ # high.thresh_median = 2.25
+ # high.thresh_upper_bound = 2.25
 
 
 #years we want to investigate

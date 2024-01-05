@@ -27,6 +27,7 @@ st_write(mtbs,"data/landscape_data/mtbs_perims/mtbs_cleaned.shp", append = F)
 #create BPS polygon
 
 bps <- rast("data/landscape_data/LF2020_BPS_220_CONUS/tif/LC20_BPS_220.tif")
+bps_csv <- read_csv("data/landscape_data/LF2020_BPS_220_CONUS/CSV_data/LF20_BPS_220.csv")
 states_wna <- vect("data/masks/cleaned/wna_states.shp")
 bps_coltab <- coltab(bps)
 bps_wna <- crop(bps, states_wna)
@@ -35,10 +36,16 @@ rm(bps, bps_wna)
 
 activeCat(bps_wna_1km) <- 1
 bps_polygon_code <- as.polygons(bps_wna_1km,dissolve =T)
-bps_polygon_code_sv <- aggregate(bps_polygon_code, by = "BPS_CODE")%>%
-  subset(BPS_CODE != -9999 & BPS_CODE != -1111 & BPS_CODE != 11
-         & BPS_CODE != 12  & BPS_CODE != 31, NSE = T) 
-names(bps_polygon_code_sv)[1] <- "DispN"
+bps_polygon_code_sv <- aggregate(bps_polygon_code, by = "BPS_CODE") %>%
+  as.data.frame(geom = "WKT") %>%
+  left_join(bps_csv, by = join_by("BPS_CODE" == "BPS_CODE")) %>%
+  select(BPS_CODE, GROUPVEG, FRG_NEW, geometry)%>%
+  distinct() %>%
+  filter(BPS_CODE != -9999 & BPS_CODE != -1111 & BPS_CODE != 11
+         & BPS_CODE != 12  & BPS_CODE != 31) %>%
+  vect(., "geometry", crs = crs(bps_polygon_models))
+writeVector(bps_polygon_code_sv, "data/masks/cleaned/bps_codes.gpkg", overwrite = T)
+
 
 
 
@@ -56,9 +63,14 @@ st_write(bps_polygon_code_sf,"data/masks/cleaned/bps_code.shp")
 
 activeCat(bps_wna_1km) <- 2
 bps_polygon_zone <- as.polygons(bps_wna_1km,dissolve =T,na.rm = T,trunc = F)
-bps_polygon_zone_sv <- aggregate(bps_polygon_zone, by = "ZONE")%>%
-  subset(ZONE = "na", NSE = T)
-names(bps_polygon_zone_sv)[1] <- "DispN"
+bps_polygon_zone_sv <- aggregate(bps_polygon_zone, by = "ZONE") %>%
+  as.data.frame(geom = "WKT") %>%
+  left_join(bps_csv, by = join_by("ZONE" == "ZONE")) %>%
+  select(ZONE, GROUPVEG, FRG_NEW, geometry)%>%
+  distinct() %>%
+  vect(., "geometry", crs = crs(bps_polygon_zone))
+writeVector(bps_polygon_zone_sv, "data/masks/cleaned/bps_zones.gpkg", overwrite = T)
+
 bps_polygon_zone_sf <- st_as_sf(bps_polygon_zone)%>%
   group_by(ZONE)%>%
   summarize(geometry = st_union(geometry))%>%
@@ -70,9 +82,15 @@ st_write(bps_polygon_zone_sf,"data/masks/cleaned/bps_zones.shp")
 
 activeCat(bps_wna_1km) <- 3
 bps_polygon_models <- as.polygons(bps_wna_1km,dissolve =T)
-bps_polygon_models_sv <- aggregate(bps_polygon_models, by = "ZONE")%>%
-  subset(BPS_MODEL != "na", NSE = T)
-names(bps_polygon_models_sv)[1] <- "DispN"
+bps_polygon_models_sv <- aggregate(bps_polygon_models, by = "BPS_MODEL") %>%
+  as.data.frame(geom = "WKT") %>%
+  left_join(bps_csv, by = join_by("BPS_MODEL" == "BPS_MODEL")) %>%
+  select(BPS_MODEL, GROUPVEG, FRG_NEW, geometry)%>%
+  distinct() %>%
+  filter(BPS_MODEL != "na") %>%
+  vect(., "geometry", crs = crs(bps_polygon_models))
+writeVector(bps_polygon_models_sv, "data/masks/cleaned/bps_models.gpkg", overwrite = T)
+
 
 bps_polygon_models_sf <- st_as_sf(bps_polygon_models)%>%
   group_by(BPS_MODEL)%>%

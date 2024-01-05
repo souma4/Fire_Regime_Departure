@@ -51,9 +51,12 @@ normalize_frequency <- function(historical_freq, contemporary_freq, freq_dat_nor
   hist_mean <- mean(historical_freq$freq, na.rm = T)
   
     hist_sd <- sd(historical_freq$freq, na.rm = T)
-  if(is.na(hist_sd)){
+  if(is.na(hist_sd) | hist_sd == 0){
     return("Error: no historical variance")
   }
+    if(is.na(hist_mean) | hist_mean == 0){
+      return("Error: no historical mean")
+    }
     contemporary_freq_norm <<- copy(contemporary_freq)[,freq := (freq-hist_mean)/hist_sd]
     historical_freq_norm <<- copy(historical_freq)[, freq := (freq-hist_mean)/hist_sd]
     if (freq_dat_norm == T){

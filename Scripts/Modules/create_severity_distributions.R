@@ -151,8 +151,11 @@ output <- list(historical_sev = historical_sev,
 normalize_severity <- function(historical_sev, contemporary_sev, combined_sev_norm = T){
     hist_mean <- mean(historical_sev$sev, na.rm = T)
     hist_sd <- sd(historical_sev$sev, na.rm = T)
-    if(is.na(hist_sd)){
+    if(is.na(hist_sd) | hist_sd == 0){
       return("Error: no historical variance")
+    }
+    if(is.na(hist_mean) | hist_mean == 0){
+      return("Error: no historical mean")
     }
     
     contemporary_sev_norm<<- copy(contemporary_sev)[,sev := (sev-hist_mean)/hist_sd]
@@ -160,6 +163,7 @@ normalize_severity <- function(historical_sev, contemporary_sev, combined_sev_no
     if(combined_sev_norm == T){
       combined_sev <<- combined_sev[,sev := (sev-hist_mean)/hist_sd]
     }
+    
     return("Passed")
     
     

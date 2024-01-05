@@ -1,8 +1,20 @@
-pkgs <- c("foreach", "doParallel","sampling","tidyverse", 
-          "terra", "sf",  "units", "RColorBrewer","ggrepel",
+pkgs <- c("foreach", "doParallel","tidyverse", 
+          "terra", "sf",  "units", "RColorBrewer",
           "data.table")
 invisible(lapply(pkgs, library, character.only = T))
 source("scripts/analysis/fire-regime-departure_helpers.R")
+####LINKS TO PACKAGE DOCUMENTATION
+#https://cran.r-project.org/web/packages/foreach/vignettes/foreach.html   #foreach vignette
+#ttps://cran.r-project.org/web/packages/foreach/foreach.pdf               #foreach
+#https://cran.r-project.org/web/packages/doParallel/index.html            #doParallel
+#https://cran.r-project.org/web/packages/tidyverse/tidyverse.pdf          #tidyverse
+#https://cran.r-project.org/web/packages/terra/terra.pdf                  #terra
+#https://rspatial.org/pkg/                                                #terra vignettes
+#https://cran.r-project.org/web/packages/sf/sf.pdf                        #sf
+#https://cran.r-project.org/web/packages/units/units.pdf                  #units
+#https://cran.r-project.org/web/packages/RColorBrewer/RColorBrewer.pdf    #RColorBrewer
+#https://cran.r-project.org/web/packages/data.table/data.table.pdf        #data.table
+#https://cran.r-project.org/web/packages/data.table/vignettes/datatable-intro.html #data.table vignette
 
 
 
@@ -14,9 +26,10 @@ Calculate_fire_regime_and_departure <- function(bps_rast_path, #Path to your BPS
                                                 output_path, #The folder you want outputs to be
                                                 display_name, #The column in your mask_polygon vector that you want to use for naming each area
                                                 vectorOutputName,
-                                                write_year_raster_out = 'memory', # if true, writes yearly fires out to a created folder (output_path/mask_name/fires/...) IF no other fires exist or write_year_raster_overwrite = T if FALSE, doesn't write rasters
-                                                #if 'overwrite' is TRUE, will overwrite any existing rasters
-                                                #if 'memory' is TRUE, will create rasters in memory instead of disk
+                                                write_year_raster_out = 'memory', # if TRUE, writes yearly fires out to a created folder (output_path/mask_name/fires/...) but if fires already exist, uses that
+                                                #if FALSE, will use existing files of folders created by TRUE or overwrite
+                                                #if 'overwrite', will overwrite any existing rasters
+                                                #if 'memory', will create rasters in memory instead of disk
                                                 
                                                 forestFilter = NULL, #a filter for forested areas. if you want to filter to forested areas, put a binary nonforest/forest spatRast here
                                                 normalize_plots = F, #If you want plots that are normalized by historical mean and variance
@@ -79,7 +92,8 @@ registerDoParallel(cores) #register parralel workspaces
 stored_data <- foreach(i = 1:length(mask_units), .export = c("mask_all","fire_path_folder",
                                                              "bps", "n.iter", "bps_csv", 
                                                              "mask_units", "fire_perim_all",
-                                                             "forestFilter"),
+                                                             "forestFilter", "write_year_raster_out",
+                                                             "make_figures", "colors2"),
                        .packages = pkgs[c(-1,-2)],
                        .inorder = FALSE, .errorhandling = "pass") %dopar%{
  #source all of the relevant functions. MUST DO WITHIN LOOP
@@ -97,7 +111,7 @@ stored_data <- foreach(i = 1:length(mask_units), .export = c("mask_all","fire_pa
     name_unit <- mask_units[i]
     dir_name <- gsub(" ", "_", name_unit)
       output_name <- paste0(output_path,"/",dir_name)
-      if(write_year_raster_out != "memory" & make_figures == FALSE){
+      if(write_year_raster_out != "memory" & make_figures != FALSE){
         dir.create(output_name, showWarnings = F)
       }
     
@@ -121,14 +135,22 @@ stored_data <- foreach(i = 1:length(mask_units), .export = c("mask_all","fire_pa
     if(inherits(perims, "error")){
       individual_stats <- list("No contemporary fire, cannot analyze")
       
-      if(write_year_raster_out != "memory" & make_figures == FALSE){
+      if(write_year_raster_out != "memory" & make_figures != FALSE){
       save(individual_stats, file = paste0(output_name,"/",name_unit,"_stats.RData"))
       write.table(matrix("Cannot Analyze"), file = paste0(output_name,"/CANT_ANALYZE.txt"), append = F)
       }
       return(individual_stats)
 
-    }
-    
+    } else if (nrow(perims) == 0){
+      individual_stats <- list("No contemporary fire, cannot analyze")
+      
+      if(write_year_raster_out != "memory" & make_figures != FALSE){
+        save(individual_stats, file = paste0(output_name,"/",name_unit,"_stats.RData"))
+        write.table(matrix("Cannot Analyze"), file = paste0(output_name,"/CANT_ANALYZE.txt"), append = F)
+        
+      }
+      return(individual_stats)
+    }    
       #create yearly rasters and figures folder if contemporary fires exist
     yearly_rasters_folder <- paste0(output_name,"/fires")
     
@@ -181,14 +203,18 @@ stored_data <- foreach(i = 1:length(mask_units), .export = c("mask_all","fire_pa
                             yearly_rasters_folder, #path to output yearly raster folder
                             ndvi_threshold #ndvi threshold. if below, remove
                             )   
+          return("Passed")
         },
         #If an error occurs here it means YOU ARE MISSING THE CBI MAP FROM PARKS ET AL 2019
         error = function(e){
-          m <- message(paste0(e," You need to add the named file to the yearly fires folder using Parks et al 2019"))
+          m <- structure(
+            list( message = paste0(e," You need to add the named file to the yearly fires folder using Parks et al 2019")),
+            .Names = c("message"),
+            class = c("error"))
           return(m)
           })
       if(inherits(check, "error")){
-        return(check)
+        return(check$message)
       } 
       
     }
@@ -238,22 +264,38 @@ stored_data <- foreach(i = 1:length(mask_units), .export = c("mask_all","fire_pa
     }else{
       forestFilter_mask <- NULL
     }  
+    
     #filters pixels
-    filter_data <- Sampling_scheme(bps_mask, #landscape bps raster
-                    mask, #spatVect of landscape
-                    perims, #perims for landscape
-                    mosaic_stack_30m, #raster stack of yearly fire severities
-                    bps_csv, #bps csv
-                    proportion = p.area, #proportion of area to sample
-                    n.iter, #number of simulations to run for each landscape
-                    forestFilter = forestFilter_mask #whether to filter forests
-                    )
+    filter_data <- tryCatch(
+      expr = {
+      filter_data <- Sampling_scheme(bps_mask, #landscape bps raster
+                                     mask, #spatVect of landscape
+                                     perims, #perims for landscape
+                                     mosaic_stack_30m, #raster stack of yearly fire severities
+                                     bps_csv, #bps csv
+                                     proportion = p.area, #proportion of area to sample
+                                     n.iter, #number of simulations to run for each landscape
+                                     forestFilter = forestFilter_mask #whether to filter forests
+      )
+    }, error = function(e){
+      m <- structure(
+        list(message = paste0(e, "\nMask:",name_unit,"\nThis happens when you have < 1000 pixels to draw from. LOW SAMPLE AREA")),
+        .Names = c("message"),
+        class = c("error"))
+      return(m)
+    }
+    )
+    if(inherits(filter_data, "error")){
+      return(filter_data)
+    } 
+    
+    
      #create and write fire freq map
     if(make_figures == T){
     freq_map_colorPalette <- rev(RColorBrewer::brewer.pal(9, "YlOrRd"))
     freq_map_length <- terra::minmax(filter_data$freq_map)[2]-terra::minmax(filter_data$freq_map)[1]
     
-    freq_map_colorPalette <- c("#787882",freq_map_colorPalette[1:freq_map_length])
+    freq_map_colorPalette <- c("white",freq_map_colorPalette[1:freq_map_length])
     coltab(filter_data$freq_map)<-freq_map_colorPalette
     writeRaster(filter_data$freq_map, paste0(figure_folder,"/fire_frequency_map_",dir_name,".tiff"), filetype = "GTiff", overwrite = T)
     
@@ -266,16 +308,16 @@ stored_data <- foreach(i = 1:length(mask_units), .export = c("mask_all","fire_pa
     # dev.off()
     # 
         #create and write bps_map
-    pdf(file = paste0(figure_folder,"/bps_",dir_name,".pdf"), width = 1920, height = 1080, pointsize = 20)
+    pdf(file = paste0(figure_folder,"/bps_",dir_name,".pdf"), width = 16, height = 9, pointsize = 20)
     activeCat(bps_mask) <- 4
     #writeRaster(bps_mask, paste0(figure_folder,"/bps_map_",dir_name,".tiff"), filetype = "GTiff", overwrite = T)
     
-    plot(bps_mask, mar = c(3.1, 3.1,3.1,1800),
+    plot(bps_mask, mar = c(0.1, 0.1,0.1,10.5),
          plg=list( # parameters for drawing legend
            title = "BioPhysical Setting",
-           title.cex = 3, # Legend title size
-           cex = 70 # Legend text size
-         ))
+           title.cex = 0.8, # Legend title size
+           cex = .4 # Legend text size
+         ), axes = F)
     plot(mask, lwd = 2, add = T)
     dev.off()
     }
@@ -465,6 +507,7 @@ stored_data <- foreach(i = 1:length(mask_units), .export = c("mask_all","fire_pa
       
       
       #checks that you have both severities [check]
+      
       if(length(severity$historical_sev$sev)!=0 & length(severity$contemporary_sev$sev)!= 0){
           
         
@@ -1222,8 +1265,8 @@ valid_sf <- st_as_sf(left_join(valid_df, mask_sf, by = "name")) %>%
   tidyr::unite('bicat_norm',emd_freq_norm_cat,emd_sev_norm_cat)%>%
   dplyr::mutate('numcat_median' = as.numeric(factor(bicat_median)), 'numcat_norm' = as.numeric(factor(bicat_norm)))
 
-terra::writeVector(terra::vect(valid_sf), filename = paste0(out_file,"/",vectorOutputName,".gpkg"), overwrite = T)
 
+terra::writeVector(terra::vect(valid_sf), filename = paste0(out_file,"/",vectorOutputName,".gpkg"), overwrite = T)
 
   return(valid_sf) #SAVE STORED_DATA (all landscapes looped through) 
 }
