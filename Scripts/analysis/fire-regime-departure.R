@@ -5,7 +5,7 @@ invisible(lapply(pkgs, library, character.only = T))
 source("scripts/analysis/fire-regime-departure_helpers.R")
 ####LINKS TO PACKAGE DOCUMENTATION
 #https://cran.r-project.org/web/packages/foreach/vignettes/foreach.html   #foreach vignette
-#ttps://cran.r-project.org/web/packages/foreach/foreach.pdf               #foreach
+#https://cran.r-project.org/web/packages/foreach/foreach.pdf               #foreach
 #https://cran.r-project.org/web/packages/doParallel/index.html            #doParallel
 #https://cran.r-project.org/web/packages/tidyverse/tidyverse.pdf          #tidyverse
 #https://cran.r-project.org/web/packages/terra/terra.pdf                  #terra
