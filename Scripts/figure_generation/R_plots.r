@@ -45,7 +45,7 @@ fireRegimeDeparture_plot <- ggplot() +
   labs(fill = "Fire-Regime\nDepature") +
   theme_bw() +
    theme(plot.margin = margin(0.1, 0.1, 1, 0, "cm")) 
-ggsave(paste0(outpath,"/fireRegimeDeparture_map.jpg"), plot = fireRegimeDeparture_plot, width = 8, height = 6, units = "in")
+#ggsave(paste0(outpath,"/fireRegimeDeparture_map.jpg"), plot = fireRegimeDeparture_plot, width = 8, height = 6, units = "in")
 
 frccDeparture_plot <- ggplot() +
 geom_sf(data = states_df, fill = "grey90", color = "black") +
@@ -81,7 +81,7 @@ diverging_departure_plot <- ggplot() +
   geom_sf(data = df_joined_div, fill = df_joined_div$color_ramp_color, linewidth = 0) +
   theme_bw()
 diverging_departure_plot
-ggsave(paste0(outpath,"/diverging_departure_map.jpg"), plot = diverging_departure_plot, width = 8, height = 6, units = "in")
+ggsave(paste0(outpath,"/main/diverging_departure_map.jpg"), plot = diverging_departure_plot, width = 8, height = 6, units = "in")
 
 
 
@@ -113,7 +113,7 @@ total_departure_boxplot <- df_joined_boxplot %>%
        panel.grid.minor.x = element_blank())
 
 # Save the plot
-ggsave(paste0(outpath,"/emd_boxplot.jpg"), plot = total_departure_boxplot, width = 8, height = 6, units = "in")
+ggsave(paste0(outpath,"/supplemental/emd_boxplot.jpg"), plot = total_departure_boxplot, width = 8, height = 6, units = "in")
 
 # Repeat the process for frequency departure and severity departure
 frequency_departure_boxplot <- df_joined_boxplot %>%
@@ -128,7 +128,7 @@ frequency_departure_boxplot <- df_joined_boxplot %>%
        panel.grid.minor.x = element_blank())
 
 # Save the plot
-ggsave(paste0(outpath,"/emd_frequency_boxplot.jpg"), plot = frequency_departure_boxplot, width = 8, height = 6, units = "in")
+ggsave(paste0(outpath,"/supplemental/emd_frequency_boxplot.jpg"), plot = frequency_departure_boxplot, width = 8, height = 6, units = "in")
 
 # Boxplots for severity departure
 severity_departure_boxplot <- df_joined_boxplot %>%
@@ -143,12 +143,12 @@ severity_departure_boxplot <- df_joined_boxplot %>%
        panel.grid.minor.x = element_blank())
 
 # Save the plot
-ggsave(paste0(outpath,"/emd_severity_boxplot.jpg"), plot = severity_departure_boxplot, width = 8, height = 6, units = "in")
+ggsave(paste0(outpath,"/supplemental/emd_severity_boxplot.jpg"), plot = severity_departure_boxplot, width = 8, height = 6, units = "in")
 # Combine boxplots
 combined_boxplot <- ggarrange(frequency_departure_boxplot, severity_departure_boxplot, total_departure_boxplot, ncol = 2, nrow = 2)
 
 # Save the combined plot
-ggsave(paste0(outpath,"/emd_boxplots.jpg"), plot = combined_boxplot, width = 12, height = 8, units = "in")
+ggsave(paste0(outpath,"/supplemental/emd_boxplots.jpg"), plot = combined_boxplot, width = 12, height = 8, units = "in")
 
 
 ##do the same for FRCC
@@ -179,7 +179,7 @@ frcc_departure_boxplot <- df_joined_boxplot %>%
        panel.grid.minor.x = element_blank())
 
 # Save the plot
-ggsave(paste0(outpath,"/emd_boxplot.jpg"), plot = total_departure_boxplot, width = 8, height = 6, units = "in")
+ggsave(paste0(outpath,"/supplemental/frcc_boxplot.jpg"), plot = total_departure_boxplot, width = 8, height = 6, units = "in")
 
 # Repeat the process for frequency departure and severity departure
 frccfreq_departure_boxplot <- df_joined_boxplot %>%
@@ -194,7 +194,7 @@ frccfreq_departure_boxplot <- df_joined_boxplot %>%
        panel.grid.minor.x = element_blank())
 
 # Save the plot
-ggsave(paste0(outpath,"/emd_frequency_boxplot.jpg"), plot = frequency_departure_boxplot, width = 8, height = 6, units = "in")
+ggsave(paste0(outpath,"/supplemental/frcc_frequency_boxplot.jpg"), plot = frequency_departure_boxplot, width = 8, height = 6, units = "in")
 
 # Boxplots for severity departure
 frccsev_departure_boxplot <- df_joined_boxplot %>%
@@ -208,23 +208,30 @@ frccsev_departure_boxplot <- df_joined_boxplot %>%
        panel.grid.major.x = element_blank(),
        panel.grid.minor.x = element_blank())
 
-
+# Save the plot
+ggsave(paste0(outpath,"/supplemental/frcc_severity_boxplot.jpg"), plot = severity_departure_boxplot, width = 8, height = 6, units = "in")
 
 
 
 ####figure 5
 figure5 <- ggarrange(fireRegimeDeparture_plot, NULL, total_departure_boxplot,
 #frccDeparture_plot, NULL, frcc_departure_boxplot,
-ncol = 3,  common.legend = FALSE,
-widths = c(2.8,-0,1.2), labels = c("A", "", "B"#,
-                                #"C", "", "D"
-                                ))
-ggsave(paste0(outpath,"/figure5.jpg"), figure5, width = 7, height = 6, units = "in")
+ncol = 3,
+#nrow = 2,
+common.legend = FALSE,
+widths = c(2.8,-0,1.2),
+#heights = c(1, 1),
+labels = c("A", "", "B"#,
+#          "C", "", "D"
+          )
+)
+figure5
+ggsave(paste0(outpath,"/main/figure5.jpg"), figure5, width = 8, height = 6, units = "in")
 
 
 
 
-
+#####
 ####ridgeline plots
 total_departure_ridge <- df_joined_boxplot %>%
        mutate(NAME = factor(NAME, levels = arrange(median_ranks, emd_both_normalized_rank)$NAME )) %>%
@@ -286,7 +293,7 @@ ggsave(paste0(outpath,"/emd_severity_ridgeline.jpg"), plot = severity_departure_
 ################
 ################
 ################
-#sensitivity
+# sensitivity
 colors <- distinctColorPalette(30)
 
 census <- as.data.frame(read_sf("data/outputs/med_grids/sensitivity/census.gpkg"))
@@ -313,6 +320,7 @@ combined_df <- bind_rows(
 )
 
 # Melt the data frame to long format for plotting
+vars <- c("emd_frequency_normalized", "emd_severity_normalized", "emd_both_normalized")
 long_df <- pivot_longer(combined_df, vars, names_to = "variable", values_to = "value")%>%
   mutate(variable = case_when(
     variable == "emd_frequency_normalized" ~ "Frequency Departure",
@@ -349,6 +357,8 @@ boxplots <- ggplot(long_df, aes(x = "", y = value, fill = dataset)) +
          legend.text = element_text(size = 10),
          legend.key.size = unit(0.5, "cm"))
 boxplots
+#save plot
+ggsave(paste0(outpath,"/sensitivity/emd_sensitivity_boxplots.jpg"), plot = boxplots, width = 12, height = 6, units = "in")
 
 boxplots_var <- ggplot(long_df, aes(x = "", y = value_var, fill = dataset)) +
   facet_wrap(~ variable_var, scales = "free") +
@@ -361,7 +371,8 @@ boxplots_var <- ggplot(long_df, aes(x = "", y = value_var, fill = dataset)) +
          legend.text = element_text(size = 10),
          legend.key.size = unit(0.5, "cm"))
 boxplots_var
-
+#save plot
+ggsave(paste0(outpath,"/sensitivity/emd_sensitivity_boxplots_var.jpg"), plot = boxplots_var, width = 12, height = 6, units = "in")
 
 # Density plot
 dataset_names <- c("Census",  "Miller & Thode", iter_names, area_names, run_names)
@@ -376,6 +387,8 @@ density_plot <- ggplot(long_df, aes(x = value, fill = dataset)) +
                             legend.text = element_text(size = 10),
                             legend.key.size = unit(0.5, "cm"))
 density_plot
+#save plot
+ggsave(paste0(outpath,"/sensitivity/emd_sensitivity_density.jpg"), plot = density_plot, width = 12, height = 6, units = "in")
 
 # bias against original (df_joined)
 
@@ -447,7 +460,8 @@ bias_boxplots <- ggplot(long_df_bias, aes(x = "", y = value, fill = dataset)) +
          legend.text = element_text(size = 10),
          legend.key.size = unit(0.5, "cm"))
 bias_boxplots
-
+# Save the bias plot
+ggsave(filename = paste0(outpath,"/sensitivity/bias_boxplots.jpg"), plot = bias_boxplots, width = 12, height = 12, units = "in")
 #bias  Density plot
 dataset_names <- c("Census",  "Miller & Thode", iter_names, area_names, run_names)
 bias_density_plot <- ggplot(long_df_bias, aes(x = value, fill = dataset)) +
@@ -462,7 +476,7 @@ bias_density_plot <- ggplot(long_df_bias, aes(x = value, fill = dataset)) +
                             legend.key.size = unit(0.5, "cm"))
 bias_density_plot
 # Save the bias plot
-ggsave(filename = "bias_plot.svg", plot = bias_plot, width = 10, height = 8, units = "in")
+ggsave(filename = paste0(outpath,"/sensitivity/bias_density.jpg"), plot = bias_density_plot, width = 12, height = 12, units = "in")
 
 
 # Calculate the mean bias for each dataset then convert to long format
@@ -539,7 +553,57 @@ mean_bias_plot <- ggplot(se_bias, aes(x = x, y = value, group = stat)) +
         panel.grid.minor.x = element_blank(),
         legend.position = "None")
 mean_bias_plot
+# Save the bias plot
+ggsave(filename = paste0(outpath,"/sensitivity/bias_plot.jpg"), plot = mean_bias_plot, width = 10, height = 8, units = "in")
 
 
+
+#####supplemental
+#map fire frequency emd
+firefreqDeparture_plot <- ggplot() +
+  geom_sf(data = states_df, fill = "grey90", color = "black") +
+  geom_sf(data = df_joined, aes(fill = signed_emd_frequency), linewidth = 0) +
+  scale_fill_viridis_c(option = "A") +
+  labs(fill = "Fire-Frequency\nDepature") +
+  theme_bw() +
+  theme(plot.margin = margin(0.1, 0.1, 1, 0, "cm")) 
+
+#map fire severity emd
+fireSeverityDeparture_plot <- ggplot() +
+  geom_sf(data = states_df, fill = "grey90", color = "black") +
+  geom_sf(data = df_joined, aes(fill = signed_emd_severity), linewidth = 0) +
+  scale_fill_viridis_c(option = "A") +
+  labs(fill = "Fire-Severity\nDepature") +
+  theme_bw() +
+  theme(plot.margin = margin(0.1, 0.1, 1, 0, "cm"))
+
+#combined into three panel plot
+departure_maps <- ggarrange(firefreqDeparture_plot, fireSeverityDeparture_plot, firefreqDeparture_plot, ncol = 2, nrow = 2)
+# save three panel plot
+ggsave(filename = paste0(outpath,"/supplemental/departure_maps.jpg"), plot = departure_maps, width = 10, height = 10, units = "in")
+fireRegimeDeparture_plot
+
+#perform the same but using FRCC
+#map FRCC frequency
+FRCCfreqDeparture_plot <- ggplot() +
+  geom_sf(data = states_df, fill = "grey90", color = "black") +
+  geom_sf(data = df_joined, aes(fill = FRCC_freq_dep), linewidth = 0) +
+  scale_fill_viridis_c(option = "A") +
+  labs(fill = "FRCC Frequency\nDepature") +
+  theme_bw() +
+  theme(plot.margin = margin(0.1, 0.1, 1, 0, "cm"))
+
+#map FRCC severity
+FRCCSeverityDeparture_plot <- ggplot() +
+  geom_sf(data = states_df, fill = "grey90", color = "black") +
+  geom_sf(data = df_joined, aes(fill = FRCC_sev_dep), linewidth = 0) +
+  scale_fill_viridis_c(option = "A") +
+  labs(fill = "FRCC Severity\nDepature") +
+  theme_bw() +
+  theme(plot.margin = margin(0.1, 0.1, 1, 0, "cm"))
+# combined into three panel plot
+FRCC_departure_maps <- ggarrange(FRCCfreqDeparture_plot, FRCCSeverityDeparture_plot, frccDeparture_plot, ncol = 2, nrow = 2)
+# save three panel plot
+ggsave(filename = paste0(outpath,"/supplemental/FRCC_departure_maps.jpg"), plot = FRCC_departure_maps, width = 10, height = 10, units = "in")
 
 

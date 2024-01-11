@@ -37,33 +37,33 @@ med_hex_forest_analysis <- Calculate_fire_regime_and_departure("data/landscape_d
                                                         n.iter = 100,
                                                         make_figures = T)
 
-boundaries <- st_read("data/masks/cleaned/med_bps_grid.shp")
-set.seed(1)
-med_sq_analysis <- Calculate_fire_regime_and_departure("data/landscape_data/LF2020_BPS_220_CONUS/tif/LC20_BPS_220.tif",
-                                                        "data/landscape_data/LF2020_BPS_220_CONUS/CSV_data/LF20_BPS_220.csv",
-                                                        "data/all_fires",
-                                                        boundaries,
-                                                        "data/landscape_data/mtbs_perims/mtbs_cleaned.shp",
-                                                        "data/outputs/med_grids/med_sq_all",
-                                                        "index",
-                                                       "med_sq",
-                                                        write_year_raster_out = T,
-                                                        n.cores = 6,
-                                                        n.iter = 100)
-set.seed(1)
-med_sq_forest_analysis <- Calculate_fire_regime_and_departure("data/landscape_data/LF2020_BPS_220_CONUS/tif/LC20_BPS_220.tif",
-                                                        "data/landscape_data/LF2020_BPS_220_CONUS/CSV_data/LF20_BPS_220.csv",
-                                                        "data/all_fires",
-                                                        boundaries,
-                                                        "data/landscape_data/mtbs_perims/mtbs_cleaned.shp",
-                                                        "data/outputs/med_grids/med_sq_forested",
-                                                        "index",
-                                                        "med_sq_forested",
-                                                        write_year_raster_out = T,
-                                                        forestFilter = forest,
-                                                        ndvi_threshold = 0.35,
-                                                        n.cores = 6,
-                                                        n.iter = 100)
+# boundaries <- st_read("data/masks/cleaned/med_bps_grid.shp")
+# set.seed(1)
+# med_sq_analysis <- Calculate_fire_regime_and_departure("data/landscape_data/LF2020_BPS_220_CONUS/tif/LC20_BPS_220.tif",
+#                                                         "data/landscape_data/LF2020_BPS_220_CONUS/CSV_data/LF20_BPS_220.csv",
+#                                                         "data/all_fires",
+#                                                         boundaries,
+#                                                         "data/landscape_data/mtbs_perims/mtbs_cleaned.shp",
+#                                                         "data/outputs/med_grids/med_sq_all",
+#                                                         "index",
+#                                                        "med_sq",
+#                                                         write_year_raster_out = T,
+#                                                         n.cores = 6,
+#                                                         n.iter = 100)
+# set.seed(1)
+# med_sq_forest_analysis <- Calculate_fire_regime_and_departure("data/landscape_data/LF2020_BPS_220_CONUS/tif/LC20_BPS_220.tif",
+#                                                         "data/landscape_data/LF2020_BPS_220_CONUS/CSV_data/LF20_BPS_220.csv",
+#                                                         "data/all_fires",
+#                                                         boundaries,
+#                                                         "data/landscape_data/mtbs_perims/mtbs_cleaned.shp",
+#                                                         "data/outputs/med_grids/med_sq_forested",
+#                                                         "index",
+#                                                         "med_sq_forested",
+#                                                         write_year_raster_out = T,
+#                                                         forestFilter = forest,
+#                                                         ndvi_threshold = 0.35,
+#                                                         n.cores = 6,
+#                                                         n.iter = 100)
 #med_hex_analysis
 
 #med_hex
@@ -120,7 +120,7 @@ med_hex_census <- Calculate_fire_regime_and_departure("data/landscape_data/LF202
                                                   "census",
                                                   forestFilter = forest,
                                                   n.cores = 3,
-                                                  n.iter = 3,
+                                                  n.iter = 3, #CODE BREAKS WHEN ITER = 1, SET TO 3
                                                   p.area = 1,
                                                   ndvi_threshold = 0.35,
                                                   make_figures = F)

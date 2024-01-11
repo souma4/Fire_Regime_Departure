@@ -1,6 +1,8 @@
 # Fire Regime Departure
+[![Wiki](https://img.shields.io/badge/Wiki)](https://github.com/souma4/Fire_Regime_Departure/wiki)
 
-Currently Version 1.0. All the code is stable.
+
+Currently Version 1.1. All the code is stable.
 Investigating fire regime departures across the american west as a part of a masters. Contains paper resources, scripts, and demos for EMD and our workflow in three wildernesses. If you have any questions about the code, consult the [wiki](https://github.com/souma4/Fire_Regime_Departure/wiki) or contact me. Please cite this repo (and paper when it comes out) if you use it.
 
 ## Licenses
