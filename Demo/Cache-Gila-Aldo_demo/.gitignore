@@ -1,2 +1,5 @@
 *cache*
 *.tiff
+!*.R
+!*.html
+!*.Rmd

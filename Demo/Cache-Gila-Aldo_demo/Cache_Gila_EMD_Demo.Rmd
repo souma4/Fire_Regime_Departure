@@ -1,0 +1,806 @@
+---
+title: "Wilderness area EMD Demo"
+author: "Jeffrey Chandler"
+date: "`r Sys.Date()`"
+output:
+#  bookdown::word_document2:
+#    fig_caption: true
+#    reference_docx: style.docx
+  bookdown::html_document2:
+    theme: united
+    toc: true
+    toc_depth: 3
+    toc_float: true
+    number_sections: true
+    fig_caption: true
+    df_print: paged
+    code_download: true
+    code_folding: hide
+    highlight: tango
+    mathjax: "https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.7/MathJax.js?config=TeX-MML-AM_CHTML"
+fontfamily: Times
+fontsize: 12pt
+---
+
+# Set up
+
+Load in packages, set up paths, and load in data
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+
+
+```
+```{r, warnings = FALSE, message = FALSE}
+
+output_path <- "Demo/Cache-Gila-Aldo_demo"
+
+pkgs <- c("tidyverse","lpSolve", "transport", "viridisLite", "RColorBrewer", 
+          "ggExtra", "terra", "foreach","doParallel", "units","ggpubr", "reshape2", "data.table", "kableExtra")
+invisible(lapply(pkgs, library, character.only = T))
+```
+
+# Data Analysis
+The script below runs a simplified version of `fire-regime-departure.R`. If you
+unfold the code you can see what is happening. The script is set up to run for
+three wilderness areas: Cache La Poudre, Gila, and Aldo Leopold. The script
+will run for each wilderness area and save the results in a list. The list
+will contain figures and a dataframe of key statistics.
+
+```{r, cache=F, warning = F, message = F}
+setwd("../..")
+module_path <- "scripts/modules/"
+module_names <- list.files(module_path)
+source_paths = paste0(module_path,module_names)
+invisible(lapply(source_paths,source))
+ 
+bps <- rast("data/landscape_data/LF2020_BPS_220_CONUS/tif/LC20_BPS_220.tif")
+bps_csv <- fread("data/landscape_data/LF2020_BPS_220_CONUS/CSV_data/LF20_BPS_220.csv")
+
+
+wildernesses <- c("Gila", "Cache La Poudre", "Aldo Leopold")
+wildernesses_perims <- vect("data/masks/cleaned/wilderness_cleaned.shp") %>%
+  terra::subset(.,DispN %in% wildernesses, NSE = TRUE) %>%
+  project(bps)
+crop_states <- st_read("data/masks/cleaned/wna_states.shp") %>%
+  filter(CODE %in% c("AZ","NM","CO"))
+
+  
+fire_perim_all <- vect("data/landscape_data/mtbs_perims/mtbs_cleaned.shp") %>%
+   project(bps)
+
+
+colors2 <- RColorBrewer::brewer.pal(5, "RdYlBu")[c(5,2)]
+n.iter <- 1
+
+```
+
+
+
+```{r analysis, cache=F}
+setwd("../..")
+
+stored_data <- foreach(i = 1:length(wildernesses_perims), .export = c("wildernesses_perims","fire_path_folder",
+                                                             "bps", "bps_csv", 
+                                                             "wildernesses", "fire_perim_all"),
+                       .packages = pkgs) %do%{
+name_unit <- wildernesses[i]
+dir_name <- gsub(" ", "_", name_unit)
+output_name <- paste0(output_path,"/",dir_name)
+
+# fire_perim_all <- unwrap(fire_perim_all)
+# wildernesses_perims <- unwrap(wildernesses_perims)
+# bps <- unwrap(bps)
+
+mask <- subset(wildernesses_perims, DispN == name_unit, NSE = T) %>%
+    aggregate()
+perims <- intersect(fire_perim_all, mask)%>%
+    subset(Fire_Year >=year_caps[1] & Fire_Year <= year_caps[2], NSE =T)
+
+yearly_rasters_folder <- paste0(output_name,"/fires")
+    
+figure_folder <- paste0(output_name,"/figures")
+all_years <- unique(perims$Fire_Year)
+bps_mask <- crop(bps, mask, mask = T)
+
+mosaic_stack_30m <- rast(paste0(yearly_rasters_folder,"/",dir_name,"_",all_years,"_30m.tif"))
+
+names(mosaic_stack_30m) <- all_years
+    
+filter_data <- Sampling_scheme(bps_mask,
+                mask,
+                perims,
+                mosaic_stack_30m,
+                bps_csv,
+                proportion = 1,
+                n.iter = 1)
+
+
+freq_map <- crop(filter_data$freq_map, mask, mask = T)
+
+emd_freq <- vector(length = n.iter)
+emd_sev <- vector(length = n.iter)
+emd_combined <- vector(length = n.iter)
+    
+fri_contemporary <- vector(length = n.iter)
+fri_historical <- vector(length = n.iter)
+  
+pbhs_contemporary <- vector(length = n.iter)
+pbhs_historical <- vector(length = n.iter)
+
+proportion_FRGI <- vector(length = n.iter)
+
+k = 1
+
+sampled <- sample_pixels( k,
+                filter_data$contemporary_subset_data_sev,
+                filter_data$contemporary_subset_data_freq,
+                filter_data$historical_subset_data,
+                filter_data$srs)
+      
+frgs <- unlist(strsplit(sampled$historical_sample$FRG_NEW,"-"))
+frg1s <- frgs[which(frgs == "I")]
+      
+proportion_FRGI[k] <-length(frg1s) / dim(filter_data$historical_subset_data)[1]
+rm(frgs, frg1s)
+      
+dfrequency <- create_frequency_distributions (sampled$contemporary_sample_freq,
+                                      sampled$historical_sample)
+severity <- create_severity_distributions(sampled$historical_sample,
+                              sampled$contemporary_sample_sev,
+                              k)
+emd_freq[k] <- emd_Calculation(dfrequency$contemporary_freq,dfrequency$historical_freq, freq = T )
+      emd_sev[k] <-  emd_Calculation(severity$contemporary_sev,severity$historical_sev, freq = F )
+      
+contemporary_relative_sev <- severity$contemporary_sev_class[,.N,  by = .(sev)
+                                                          ][,freq := N/sum(N)]
+historical_relative_sev <- severity$historical_sev_class[,.N,  by = .(sev)
+                                                      ][,freq := N/sum(N)]
+      
+      
+      
+
+emd_combined <- sqrt(emd_freq[k]^2+emd_sev[k]^2)
+      
+fri_contemporary[k] <- year_range/mean(dfrequency$contemporary_freq$freq)
+      fri_historical[k] <- year_range/mean(dfrequency$historical_freq$freq)
+        
+      
+pbhs_contemporary[k] <-as.numeric(contemporary_relative_sev %>%
+                                          filter(sev == "High")%>%
+                                          dplyr::select(freq))
+pbhs_historical[k] <- as.numeric(historical_relative_sev %>%
+                                         filter(sev == "High")%>%
+                                         dplyr::select(freq))
+      freq_compare_bar <- ggplot()+
+        ggtitle(paste0(name_unit, " Frequency Bar Plot")) +
+        xlab("Fire Frequency")+
+        ylab("Relative Frequency")+
+        ylim(c(0,1))+
+        scale_x_continuous(breaks = seq(0,15,1))+
+        scale_fill_manual(values = colors2) +
+        #scale_pattern_manual(values = c("stripe","none"))+
+        guides(fill = guide_legend(title ="",
+                                    override.aes =list(alpha = 1))
+               #pattern = guide_legend(title = "",
+                                     # override.aes = list(pattern = c("stripe","none")))
+               )+
+        theme(axis.text = element_text(size = 6),
+              legend.text = element_text(size = 8),
+              axis.title = element_text(size = 12),
+              plot.title = element_text(size = 14),
+              legend.title = element_blank)  + 
+        theme_classic()
+      freq_dat_4plot <- dfrequency$freq_dat %>%
+        copy() %>%
+        as.data.frame() %>%
+        mutate( 
+               freq_start = ifelse(time == "Historical", freq-.5, freq),
+               freq_end = ifelse(time == "Contemporary",freq+.5,freq)
+               )
+      freq_compare_bar <- freq_compare_bar +
+        geom_col( aes(x = freq_start,y = relfreq, fill = time),data = freq_dat_4plot) 
+      
+      
+      
+      
+      sev_density <- ggplot() +
+        ggtitle(paste0(name_unit, " Severity Density from \n Historic Burning")) +
+        xlab("Severity(CBI)")+
+        ylab("Density")+
+        scale_fill_manual(values = colors2) +
+        #scale_pattern_manual(values = c("stripe","none"))+
+        guides(fill = guide_legend(title ="",
+                                    override.aes = list(alpha = 1))
+               #pattern = guide_legend(title = "",
+               #override.aes = list(pattern = c("stripe","none")))
+        )+
+        theme(axis.text = element_text(size = 6),
+              legend.text = element_text(size = 12),
+              axis.title = element_text(size = 14),
+              plot.title = element_text(size = 16),
+              legend.title = element_blank)  +
+        theme_classic()
+sev_density <- sev_density + 
+        stat_density(aes(x = sev,  color = time),severity$combined_sev, position = "identity",  geom = "line",alpha =1)
+            
+      
+      
+      
+      
+      
+      freq_sev_each <- ggplot()+
+        
+        ggtitle(paste0(name_unit, " Severity Class Bar Plot"))+
+        xlab("Severity Class")+
+        ylab("Relative Frequency")+
+        scale_color_manual(values = colors2) +
+        scale_x_continuous(breaks = c(1,2,3),labels = c("Low","Mixed","High"), limits = c(0.5, 3.5))+
+        ylim(c(0,1))+
+        guides(color = guide_legend(title ="",
+                                   override.aes = list(alpha = 1)))+
+        theme(axis.text = element_text(size = 6),
+              legend.text = element_text(size = 12),
+              axis.title = element_text(size = 14),
+              plot.title = element_text(size = 16),
+              legend.title = element_blank) +
+        theme_classic()
+freq_sev_each_4plot <-  severity$combined_sev_class %>%
+        copy() %>%
+        as.data.frame() %>%
+        mutate(sev = as.numeric(sev), 
+               sev_start = ifelse(time == "Historical", sev-.5,sev),
+               sev_end = ifelse(time == "Contemporary",sev+.5,sev))
+      
+      freq_sev_each <- freq_sev_each+
+        geom_col(aes(x = sev_start, y = relfreq,  fill = time),
+                     freq_sev_each_4plot,
+                     alpha = 1)
+      
+      
+      freq_sev_lm2h <- 
+        ggplot() +
+         ggtitle(paste0(name_unit, " Severity Class \n Low+Mixed / High Bar Plot"))+
+        xlab("Severity Class")+
+        ylab("Relative Frequency")+
+        scale_fill_manual(values = colors2) +
+        scale_x_continuous(breaks = c(1,2),labels = c("Low/Mixed","High"), limits = c(0.5,2.5))+
+         guides(fill = guide_legend(title ="",
+                                     override.aes = list(alpha = 1)),
+               )+
+        ylim(c(0,1))+
+        theme(axis.text = element_text(size = 6),
+              legend.text = element_text(size = 12),
+              axis.title = element_text(size = 14),
+              plot.title = element_text(size = 16),
+              legend.title = element_blank)  +
+        theme_classic()
+freq_sev_lm2h_4plot <-  severity$combined_sev_class %>%
+          as.data.frame() %>%
+          mutate(sev = recode(sev, Low = "Low/Mixed", Mixed = "Low/Mixed"))%>%
+          group_by(time, sev)%>%
+          summarize(n = sum(N), relfreq = sum(relfreq)) %>%
+        mutate(sev = as.numeric(sev), 
+               sev_start = ifelse(time == "Historical", sev-.5,sev),
+               sev_end = ifelse(time == "Contemporary",sev+.5,sev))
+      
+      freq_sev_lm2h <- freq_sev_lm2h+
+        geom_col(aes(x = sev_start,  y = relfreq,  fill = time),
+                     freq_sev_lm2h_4plot,
+                     alpha = 1)
+      
+
+focal_area_ha <- expanse(mask) %>%
+      set_units(ha) %>%
+      as.numeric()
+fire_area_ha <- sum(expanse(perims) %>%
+      set_units(ha)) %>%
+      as.numeric      
+
+proportion_burned <- fire_area_ha/focal_area_ha
+
+ pfrid <-calculate_pfrid(fri_contemporary,fri_historical)
+    
+sev_ratio_departure <-calculate_percent_severity_departure(pbhs_contemporary, pbhs_historical)
+    
+    frequency_departure_frcc <- (1-(pmin(fri_contemporary,fri_historical)/pmax(fri_contemporary,fri_historical)))*100
+    severity_departure_frcc <- (1-(pmin(pbhs_contemporary,pbhs_historical)/pmax(pbhs_contemporary,pbhs_historical)))*100
+    regime_departure_frcc <- (severity_departure_frcc+frequency_departure_frcc)/2
+
+    stat_names <-c("name",
+                   "study area (ha)",
+                   "area burned (ha)",
+                   "prop area burned",
+                   "prop FRG I",
+                   "contemp fri",
+                   "hist fri",
+                   
+                   "pfrid",
+                   
+                   "contemp pbhs",
+                   "hist pbhs",
+                   
+                   "sev_ratio_departure",
+                   
+                   "emd frequency",
+                   "emd severity",
+                   "emd both",
+                   
+                   "FRCC freq dep",
+                   "FRCC sev dep",
+                   "FRCC reg dep")
+    stats <- c(
+      name_unit,
+      focal_area_ha,
+      fire_area_ha, 
+      proportion_burned, 
+      proportion_FRGI,
+      
+      fri_contemporary, 
+      fri_historical,
+      
+      
+      pfrid, 
+      
+      pbhs_contemporary, 
+      pbhs_historical,
+      
+      sev_ratio_departure,
+      
+      emd_freq, 
+      emd_sev, 
+      emd_combined,
+      
+      frequency_departure_frcc,
+      severity_departure_frcc,
+      regime_departure_frcc
+    )
+    stat_df <- data.frame(stat = stat_names, value = stats) 
+    
+    
+    
+    mean_freq <- year_range/c(fri_historical,fri_contemporary)
+   
+    freq_compare_bar <- freq_compare_bar+
+    geom_vline(xintercept = mean_freq, linetype = "dashed", linewidth = 1, color = colors2)
+    
+    
+    bps_breakdown <- filter_data$historical_subset_data %>%
+      group_by(BPS_MODEL) %>%
+      summarize(n = n()) %>%
+      mutate(relfreq = n/sum(n)) %>%
+      dplyr::arrange(desc(relfreq))%>%
+      head(.,10) %>%
+      left_join(x = .,y = filter_data$historical_subset_data , by = "BPS_MODEL")%>%
+      dplyr::distinct(BPS_MODEL, .keep_all = T) 
+      
+    
+    stat_df <- list(stats = stat_df,
+                    top_bps_models = bps_breakdown,
+                    freq_map = freq_map,
+                    bps_map = bps_mask,
+                    mask = mask,
+                    freq_pdfs = dfrequency$freq_dat,
+                    
+                    historical_sev = severity$historical_sev,
+                    contemporary_sev = severity$contemporary_sev,
+                frequency_column_plot = freq_compare_bar,
+                density_plot = sev_density,
+                severity_each_sev_class = freq_sev_each,
+                severity_lm2h_sev_class = freq_sev_lm2h)
+    return(c(stat_df))
+}
+```
+## Plot key figures. 
+### Frequency maps
+
+*Gila Wilderness*
+
+```{r, fig.width = 11, echo = F}
+  spatRast <- stored_data[[1]]$freq_map
+  freq_map_colorPalette <- rev(RColorBrewer::brewer.pal(9, "YlOrRd"))
+  freq_map_length <- minmax(spatRast)[2]- minmax(spatRast)[1]
+
+freq_map_colorPalette <- c("white",freq_map_colorPalette[1:freq_map_length])
+plot(stored_data[[1]]$freq_map, col = freq_map_colorPalette, type = "classes")
+plot(stored_data[[1]]$mask, lwd = 2, add = T)
+
+```
+
+
+*Cache La Poudre Wilderness*
+
+```{r, fig.width = 11, echo = F}
+
+
+  spatRast <- stored_data[[2]]$freq_map
+  freq_map_colorPalette <- rev(RColorBrewer::brewer.pal(9, "YlOrRd"))
+  freq_map_length <- minmax(spatRast)[2]- minmax(spatRast)[1]
+
+freq_map_colorPalette <- c("white",freq_map_colorPalette[1:freq_map_length])
+
+plot(stored_data[[2]]$freq_map, col = freq_map_colorPalette, type = "classes")
+plot(stored_data[[2]]$mask, lwd = 2, add = T)
+```
+
+*Aldo Leopold Wilderness*
+
+```{r, fig.width = 11, echo = F}
+spatRast <- stored_data[[3]]$freq_map
+  freq_map_colorPalette <- rev(RColorBrewer::brewer.pal(9, "YlOrRd"))
+  freq_map_length <- minmax(spatRast)[2]- minmax(spatRast)[1]
+
+freq_map_colorPalette <- c("#1F1F46",freq_map_colorPalette[1:freq_map_length])
+
+plot(stored_data[[3]]$freq_map, col = freq_map_colorPalette, type = "classes")
+plot(stored_data[[3]]$mask, lwd = 2, add = T)
+```
+
+### Biophysical Setting maps
+
+*Gila Wilderness*
+
+```{r, fig.width = 11, echo = F}
+activeCat(stored_data[[1]]$bps_map) <- 4
+plot(stored_data[[1]]$bps_map, mar = c(3.1, 3.1,3.1,30))
+plot(stored_data[[1]]$mask, lwd = 2, add = T)
+```
+
+*Cache La Poudre Wilderness*
+
+```{r, fig.width = 11, echo = F}
+activeCat(stored_data[[2]]$bps_map) <- 4
+plot(stored_data[[2]]$bps_map, mar = c(3.1, 3.1,3.1,30))
+plot(stored_data[[2]]$mask, lwd = 2, add = T)
+```
+
+*Aldo Leopold Wilderness*
+
+```{r, fig.width = 11, echo = F}
+
+activeCat(stored_data[[3]]$bps_map) <- 4
+plot(stored_data[[3]]$bps_map, mar = c(3.1, 3.1,3.1,30))
+plot(stored_data[[3]]$mask, lwd = 2, add = T)
+```
+
+## Plot Frequency Distributions
+
+Lets focus on the fire frequency distributions for each wilderness area.
+
+```{r, fig.width = 11, echo = F}
+multi_freq <- ggpubr::ggarrange(stored_data[[1]]$frequency_column_plot,
+                        stored_data[[2]]$frequency_column_plot,
+                        stored_data[[3]]$frequency_column_plot,
+                        ncol = 3, common.legend = T
+)
+multi_freq
+
+ 
+
+```
+
+The respective historical FRI, contemporary FRI, PFRID, and EMD's over frequency are 
+
+```{r echo = FALSE}
+emd_freqs <- foreach(i = 1:3,.combine = rbind) %do% {
+ 
+ hist_fri <- as.numeric(stored_data[[i]]$stats[7,2])
+ contemp_fri <- as.numeric(stored_data[[i]]$stats[6,2])
+ pfrid <- as.numeric(stored_data[[i]]$stats[9,2])
+ emd_freq <- as.numeric(stored_data[[i]]$stats[12,2])
+ vec <- c(hist_fri,
+          contemp_fri,
+          pfrid,
+          emd_freq)
+ return(vec)
+}
+row.names(emd_freqs) <- wildernesses
+df <- as.data.frame(emd_freqs)
+names(df) <- c("Historical FRI",
+              "Contemporary FRI",
+              "PFRID",
+              "EMD Frequency")
+
+df %>%
+  mutate_if(is.numeric, round, 2) %>%
+  kbl() %>%
+  kable_classic(full_width = F, html_font = "Cambria")
+```
+
+```{r}
+gila_pdfs <- stored_data[[1]]$freq_pdfs
+cache_pdfs <- stored_data[[2]]$freq_pdfs
+aldo_pdfs <- stored_data[[3]]$freq_pdfs
+```
+
+What I see in this is these data is that the Gila and Cache La Poudre are allegedly
+very similar in terms of their historical and contemporary fire frequency. However,
+the EMD is much higher for the Cache La Poudre. This is because EMD is capturing distributional
+changes in the fire frequency distributions, and the Cache La Poudre has a much higher
+distributional change than the Gila due to the reduction in repeated fires. Meanwhile the Aldo Leopold has a high
+PFRID and a high EMD, due to both large changes in the mean and in the distribution.
+
+Now I will show you how EMD is actually calculated, so that you can understand
+what EMD is doing from a technical standpoint
+
+
+## EMD Demo
+
+For our demo, let's focus on one wilderness area We'll start with the Gila wilderness
+
+```{r echo = FALSE}
+stored_data[[1]]$frequency_column_plot
+```
+
+In order to calculate the distance from historical to contemporary distributions, we need to model transport and distance within the space defined by our pdfs. We can define how large our cost matrix is, let's just be cautious and set the from of values from 0 to 20. We can define a matrix where the rows indicate "from" and columns indicate "to" with the value indicating the cost. So row 1 column 2 can be read as "the cost to move from position 1 to position 2 and the cost is 2-1 =1". Let's build this matrix and plot it
+
+```{r warning = F}
+bins <- 0:20
+n <- length(bins)
+C <- matrix(nrow = n, ncol = n)
+for(i in 1:n){
+  for(j in 1:n){
+    C[i,j] = sqrt((bins[i]-bins[j])^2)
+  }
+}
+dimnames(C) <- list(x = bins, y = bins)
+C_df <- melt(C, value.name = "intensity")
+
+plot <- ggplot(C_df) +
+  geom_raster(aes(x = x, y = -y, fill = intensity))+
+  scale_fill_viridis_c()+
+  scale_x_continuous(position = "top")+
+  scale_y_continuous(breaks = c(-40,-50,-60),
+                    labels = c(40,50,60))+
+  labs(x = NULL,
+       y = NULL,
+    fill="Distance")+
+  theme_classic()
+# ggsave("figure_pieces/cost_mat.jpg", plot, width = 1920, height = 1080, units = "px")
+
+```
+```{r echo = FALSE}
+knitr::include_graphics("figure_pieces/Gila_cost_mat_void.jpg")
+```
+
+The next step is to solve a linear system of equations given the constraint that we want to move all of the mass in the historical dataset to the contemporary dataset. The definition of our linear program is as follows:
+
+\[
+\text{effort} = <T,C> = (\sum_{i = 1}^{n}{ \sum_{j=1}^{m} {T_{ij} C_{ij}}}) \quad (1)
+\]
+
+\[
+\begin{array}{ll}
+\text{minimize } T, & <T, C> \\
+\text{subject to} & T \mathbf{1} = p, \quad T^\top \mathbf{1} = q, \quad T \ge 0 \\
+\end{array} \quad (2)
+\]
+
+where \(T\) is our transport map, \(C\) is the cost matrix, and \(i\) and \(j\) are the row and column indices. \(\mathbf{1}\) is a vector of 1s that form our constraints that all of Adelie (\(p\)) must move to all of Gentoo (\(p\)). Let's construct the linear system of equations and compute the transport map (\(T\)) using the lpsolve::lp function (code is documented in the RMD file). 
+
+Solving this optimization problem is the Earth Mover's distance.
+
+So first we need to solve for a transport map
+
+
+
+
+
+
+```{r}
+bin_df <- data.frame(bin = bins)
+Ap <- matrix(0,nrow = n, ncol = (n)*(n))
+Aq <- matrix(0,nrow = n, ncol = (n)*(n))
+z <- matrix(0,nrow=n,ncol=n)
+z[,1] <- 1
+#C <- vector(length = n)
+#for(i in 1:n){
+  
+#    C[i] = sqrt((x[i]-x[1])^2)
+  
+#}
+
+
+for(i in 1:(n)){
+  Ap[i,] <- c(t(z))
+  Aq[i,] <- c(z)
+  z[,i] <- 0
+  if(i == (n)){
+    z[,1] <- 1
+  }else{
+  z[,i+1] <- 1
+  }
+}
+dist1 <- gila_pdfs%>%
+  filter(time == "Historical")%>%ungroup() %>%
+  left_join(bin_df,., by = join_by("bin" == "freq"))%>%
+  arrange(bin)%>%
+  mutate(rel = ifelse(is.na(relfreq), 0, relfreq))%>%
+  dplyr::select(all_of("rel"))%>%unlist()%>%unname()
+dist2 <- gila_pdfs%>%
+  filter(time == "Contemporary")%>%ungroup() %>%
+  left_join(bin_df,., by = join_by("bin" == "freq"))%>%
+  arrange(bin)%>%
+  mutate(rel = ifelse(is.na(relfreq), 0, relfreq))%>%
+  dplyr::select(all_of("rel"))%>%unlist()%>%unname()
+
+dist1 <- dist1
+dist1 <- dist1/sum(dist1)
+dist2 <- dist2
+dist2 <- dist2/sum(dist2)
+
+#Ap <- Ap[1:(n-1),]
+B <- c(dist1,dist2)
+A <- rbind(Ap,Aq)
+dir <- rep("=",length(B))
+
+solved <- invisible(lp("min",c(C),A, dir,B))
+
+t <- t(matrix(solved$solution, nrow = n, ncol = n))
+t_r <- rast(t)
+
+cb <- viridis(256)
+pax <- list(side = c(2,3),yat = c(20,10,0),ylabs = c(0,10,20),
+cex.axis = 3)
+plg <- list(
+  cex = 2.5
+)
+mar <- c(6,2,7.1,3)
+# jpeg(file = "figure_pieces/Transport_map_gila.jpg", 1920, 1080)
+#  plot(t_r, col = cb, mar = mar, pax = pax, plg = plg)
+# dev.off()
+
+```
+```{r echo = FALSE}
+knitr::include_graphics("figure_pieces/Gila_transport_map_full.jpg")
+```
+
+This is simply a transport map. It shows where we move our mass. However, EMD is the "total effort" to move that mass. In order to get "effort" we multiply this transport map by the cost matrix. We get the following figure. EMD is the sum of this matrix, which is printed below.
+
+```{r}
+t <- t(matrix(solved$solution, nrow = n, ncol = n)*C)
+t_r <- rast(t)
+
+
+ # jpeg(file = "figure_pieces/Effort_map_gila.jpg", 1920, 1080)
+ #  plot(t_r, col = cb, mar = mar, pax = pax, plg = plg)
+ # dev.off()
+```
+
+```{r echo = FALSE}
+knitr::include_graphics("figure_pieces/Gila_effort_map_full.jpg")
+print(paste0("EMD is equal to ",round(sum(t),2)))
+```
+Let's perform this same operation, but with the Cache La Poudre
+
+```{r echo = FALSE}
+knitr::include_graphics("figure_pieces/Cache_cost_mat_void.jpg")
+```
+
+```{r echo = F}
+bin_df <- data.frame(bin = bins)
+Ap <- matrix(0,nrow = n, ncol = (n)*(n))
+Aq <- matrix(0,nrow = n, ncol = (n)*(n))
+z <- matrix(0,nrow=n,ncol=n)
+z[,1] <- 1
+#C <- vector(length = n)
+#for(i in 1:n){
+  
+#    C[i] = sqrt((x[i]-x[1])^2)
+  
+#}
+
+
+for(i in 1:(n)){
+  Ap[i,] <- c(t(z))
+  Aq[i,] <- c(z)
+  z[,i] <- 0
+  if(i == (n)){
+    z[,1] <- 1
+  }else{
+  z[,i+1] <- 1
+  }
+}
+dist1 <- cache_pdfs%>%
+  filter(time == "Historical")%>%ungroup() %>%
+  left_join(bin_df,., by = join_by("bin" == "freq"))%>%
+  arrange(bin)%>%
+  mutate(rel = ifelse(is.na(relfreq), 0, relfreq))%>%
+  dplyr::select(all_of("rel"))%>%unlist()%>%unname()
+dist2 <- cache_pdfs%>%
+  filter(time == "Contemporary")%>%ungroup() %>%
+  left_join(bin_df,., by = join_by("bin" == "freq"))%>%
+  arrange(bin)%>%
+  mutate(rel = ifelse(is.na(relfreq), 0, relfreq))%>%
+  dplyr::select(all_of("rel"))%>%unlist()%>%unname()
+
+dist1 <- dist1
+dist1 <- dist1/sum(dist1)
+dist2 <- dist2
+dist2 <- dist2/sum(dist2)
+
+#Ap <- Ap[1:(n-1),]
+B <- c(dist1,dist2)
+A <- rbind(Ap,Aq)
+dir <- rep("=",length(B))
+
+solved <- invisible(lpSolve::lp("min",c(C),A, dir,B))
+
+t <- t(matrix(solved$solution, nrow = n, ncol = n))
+t_r <- rast(t)
+
+cb <- viridis(256)
+pax <- list(side = c(2,3),yat = c(20,10,0),ylabs = c(0,10,20),
+cex.axis = 3)
+plg <- list(
+  cex = 2.5
+)
+mar <- c(6,2,7.1,3)
+# jpeg(file = "figure_pieces/Transport_map_cache.jpg", 1920, 1080)
+#  plot(t_r, col = cb, mar = mar, pax = pax, plg = plg)
+# dev.off()
+
+```
+```{r echo = F}
+knitr::include_graphics("figure_pieces/Cache_transport_map_full.jpg")
+```
+
+```{r echo = F}
+t <- t(matrix(solved$solution, nrow = n, ncol = n)*C)
+t_r <- rast(t)
+
+
+ # jpeg(file = "figure_pieces/Effort_map_cache.jpg", 1920, 1080)
+ #  plot(t_r, col = cb, mar = mar, pax = pax, plg = plg)
+ # dev.off()
+```
+
+```{r echo = F}
+knitr::include_graphics("figure_pieces/Cache_effort_map_full.jpg")
+print(paste0("EMD is equal to ", round(sum(t),2)))
+```
+
+Now you have seen how EMD is functionally computed, and can comfortably understand that EMD is quite literally, the "Earth Mover's Distance".
+Simply the minimum effort to move mass from one distribution to another. 
+
+
+```{r echo = F}
+gila_hist_void_plot <- gila_pdfs %>%
+  filter(time == "Historical")%>%
+  ggplot(aes(x = freq, y = relfreq))+
+  geom_col(fill = colors2[1])+
+  theme_void()
+# ggsave("figure_pieces/gila_hist_void.jpg", gila_hist_void_plot, width = 1920, height = 1080, units = "px")
+gila_contemp_void_plot <- gila_pdfs %>%
+  filter(time == "Contemporary")%>%
+  ggplot(aes(x = freq, y = relfreq))+
+  geom_col(fill = colors2[2])+
+  theme_void()
+# ggsave("figure_pieces/gila_contemp_void.jpg", gila_contemp_void_plot, width = 1920, height = 1080, units = "px")
+
+cache_hist_void_plot <- cache_pdfs %>%
+  filter(time == "Historical")%>%
+  ggplot(aes(x = freq, y = relfreq))+
+  geom_col(fill = colors2[1])+
+  theme_void()
+# ggsave("figure_pieces/cache_hist_void.jpg", cache_hist_void_plot, width = 1920, height = 1080, units = "px")
+cache_contemp_void_plot <- cache_pdfs %>%
+  filter(time == "Contemporary")%>%
+  ggplot(aes(x = freq, y = relfreq))+
+  geom_col(fill = colors2[2])+
+  theme_void()
+# ggsave("figure_pieces/cache_contemp_void.jpg", cache_contemp_void_plot, width = 1920, height = 1080, units = "px")
+```
+
+# Citation links
+[Cuturi, 2019](https://www.youtube.com/watch?v=6iR1E6t1MMQ)
+
+[Altschuler et al., 2019](https://arxiv.org/abs/1705.09634) 
+
+[Dvurechensky et al., 2019](https://arxiv.org/abs/1802.04367)
+
+[Williams, Alex](https://alexhwilliams.info/itsneuronalblog/2020/10/09/optimal-transport/)
+
+[CH 4 Peyré & Cuturi (2019)](http://dx.doi.org/10.1561/2200000073)
+
+
