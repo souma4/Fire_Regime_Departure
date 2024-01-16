@@ -3,9 +3,22 @@ title: "EMD Demo"
 author: "Jeffrey Chandler"
 date: "`r Sys.Date()`"
 output:
-  bookdown::word_document2:
+#  bookdown::word_document2:
+#    fig_caption: true
+#    reference_docx: style.docx
+  bookdown::html_document2:
+    theme: united
+    toc: true
+    toc_depth: 3
+    toc_float: true
+    number_sections: true
     fig_caption: true
-    reference_docx: style.docx
+    df_print: paged
+    code_download: true
+    code_folding: hide
+    highlight: tango
+    css: styles.css
+    mathjax: "https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.7/MathJax.js?config=TeX-MML-AM_CHTML"
 fontfamily: Times
 fontsize: 12pt
 ---
@@ -25,9 +38,9 @@ colors <- brewer.pal(9,"Set3")[c(1,3,6)]
 
 # Problem motivation
 
-We are explorers in the Southern Ocean. We are studying three different species of penguins, Adelie, Gentoo, and Chinstrap penguins. We can identify the species, however we are making a guidebook for visitors. We want to produce a key based on anatomy that requires the minimal amount of information. This also provides scientists some benefit because we may be able infer evolutionary relationships based on similarity (similar to existing work into genetics [Schiebinger et al., 2019]<https://www.cell.com/cell/fulltext/S0092-8674(19)30039-X?_returnURL=https%3A%2F%2Flinkinghub.elsevier.com%2Fretrieve%2Fpii%2FS009286741930039X%3Fshowall%3Dtrue>). First, let's look at one trait between the penguins, bill length. Let's look at their density distributions
+We are explorers in the Southern Ocean. We are studying three different species of penguins, Adelie, Gentoo, and Chinstrap penguins. We can identify the species, however we are making a guidebook for visitors. We want to produce a key based on anatomy that requires the minimal amount of information. This also provides scientists some benefit because we may be able infer evolutionary relationships based on similarity (like the genetics work by [Schiebinger et al., 2019](https://www.cell.com/cell/fulltext/S0092-8674(19)30039-X?_returnURL=https%3A%2F%2Flinkinghub.elsevier.com%2Fretrieve%2Fpii%2FS009286741930039X%3Fshowall%3Dtrue)). Let's take a look at one important trait between the penguins, bill length. First we should plot their density distributions to see if bill lengths differ between species.
 
-```{r}
+```{r }
 #setosaXversicolor <- filter(iris, Species == "setosa" | Species == "versicolor")
 #versicolor <- filter(iris, Species == "versicolor")
 #virginica <- filter(iris, Species == "virginica")
@@ -43,9 +56,9 @@ ggplot(penguin, aes(x = bill_length_mm, color = species))+
 
 ```
 
-This is quite useful. We can see that Adelie penguins have smaller bill lengths than Gentoo and Chinstrap penguins. However, how far away? That information may be useful as we look at other characteristics. The first thing we could do is to simply find the difference between the means
+We can see that Adelie penguins have smaller bill lengths than Gentoo and Chinstrap penguins. However, how far away? This may be useful because people can indentify large differences between bill lengths, therefore would be able to identify the species. The first thing we could do is to simply find the difference between the means
 
-```{r}
+```{r }
 means <- penguin %>%
   group_by(species)%>%
   summarize(mean_bill_length = mean(bill_length_mm))
@@ -59,7 +72,7 @@ print(paste0("Adelie to Gentoo Distance = ",
 print(paste0("Chinstrap to Gentoo Distance = ",
              means$mean_bill_length[which(means$species == "Chinstrap")] - means$mean_bill_length[which(means$species == "Gentoo")]))
 ```
-```{r echo = FALSE}
+```{r }
 means_df <- means %>% mutate(y = c(1,1,1))
 
 means_df$y[3] <- 1+means$mean_bill_length[which(means$species == "Chinstrap")] - means$mean_bill_length[which(means$species == "Gentoo")]
@@ -88,22 +101,17 @@ ggplot()+
                      breaks = c(1,2),
                      minor_breaks = NULL)+
 labs(x = "Mean Length",
-     y = "Distance between Gentoo and difference in Gentoo and Chinstrap")
+     y = "Distance between Gentoo and difference in Gentoo and Chinstrap") +
+  theme_classic() +
+  theme(axis.text.y = element_blank())
   
 ```
 
-We can see that Adelie is quite smaller than Chinstrap and Gentoo, which are quite close to each other. Let's see what happens when we swap the comparison around
+We can see that Adelie is smaller than Chinstrap and Gentoo, which are close to each other.
 
-```{r}
-print(paste0("Gentoo to Chinstrap Distance = ",
-             means$mean_bill_length[which(means$species == "Gentoo")] - means$mean_bill_length[which(means$species == "Chinstrap")]))
-```
+A problem is, however, we have uncertainty around that mean value. Afterall, if there's a a large variance, Adelie penguins may have the same bill length as some Chinstrap penguins. We can address this by measuring the distance in terms of the variance around the data. We can use Standard deviations to see bill length differences while controlling for that variation. However, how do we decide which standard deviation to choose from? We can choose from the "reference" species. Let's try that
 
-We get the same value, just with the opposite sign. That makes sense.
-
-A problem is, however, we have uncertainty around that mean value. What if our data when we go elsewhere no longer applies because of larger variance? The next step we can take is to measure distance in terms of the variance around the data. We can use Standard deviations to see how far they are while controlling for that variation. However, how do we decide which standard deviation to choose from? We can choose from the "reference" species. Let's try that
-
-```{r}
+```{r }
 means <- penguin %>%
   group_by(species)%>%
   summarize(mean_bill_length = mean(bill_length_mm), sd_bill_length = sd(bill_length_mm))
@@ -117,7 +125,7 @@ print(paste0("Adelie to Gentoo Distance = ",
 print(paste0("Chinstrap to Gentoo Distance = ",
              (means$mean_bill_length[which(means$species == "Chinstrap")] - means$mean_bill_length[which(means$species == "Gentoo")])/means$sd_bill_length[which(means$species == "Chinstrap")]))
 ```
-```{r echo = FALSE}
+```{r }
 means_df <- means %>% mutate( y = c(1,1,1), x = c(
                                                   means$mean_bill_length[1]/means$sd_bill_length[1],
                                                   means$mean_bill_length[2]/means$sd_bill_length[1],
@@ -152,18 +160,20 @@ plot_by_sd <- ggplot()+
                      breaks = c(.5,1),
                      minor_breaks = NULL)+
 labs(x = "Mean SD Normalized by Adelie To all",
-     y = "Mean SD Normalized by Chinstrap and Gentoo")
+     y = "Mean SD Normalized by Chinstrap and Gentoo") +
+  theme_classic() +
+  theme(axis.text.y = element_blank())
 plot_by_sd
   
 ```
 
 Let's see what happens when we swap the order though
 
-```{r}
+```{r }
 print(paste0("Gentoo to Chinstrap Distance = ",
              (means$mean_bill_length[which(means$species == "Gentoo")] - means$mean_bill_length[which(means$species == "Chinstrap")])/means$sd_bill_length[which(means$species == "Gentoo")]))
 ```
-```{r}
+```{r }
 adj <- 13.5
 segments <- data.frame(starty = means$mean_bill_length[3]/means$sd_bill_length[3]-adj, endy = means$mean_bill_length[2]/means$sd_bill_length[3]-adj,
                startx = 15, endx = 15)
@@ -178,7 +188,7 @@ plot_by_sd +
 
 We get different values. That's frequently not a desirable characteristic in a distance measure because you now must care about the order in which you perform operations. One way we can get around this is by pooling the variance
 
-```{r}
+```{r }
 print(paste0("Adelie to Chinstrap Distance = ",
              (means$mean_bill_length[which(means$species == "Adelie")] - means$mean_bill_length[which(means$species == "Chinstrap")])/(means$sd_bill_length[which(means$species == "Adelie")]+ means$sd_bill_length[which(means$species == "Chinstrap")])))
 
@@ -192,7 +202,7 @@ print(paste0("Gentoo to Chinstrap Distance = ",
              (means$mean_bill_length[which(means$species == "Gentoo")] - means$mean_bill_length[which(means$species == "Chinstrap")])/(means$sd_bill_length[which(means$species == "Gentoo")] + means$sd_bill_length[which(means$species == "Chinstrap")])))
 ```
 
-```{r echo = FALSE}
+```{r }
 means_df <- means %>% mutate( y = c(1,1,1), x = c(
                                                   means$mean_bill_length[1]/(means$sd_bill_length[1]+means$sd_bill_length[2]),
                                                   means$mean_bill_length[2]/(means$sd_bill_length[1]+means$sd_bill_length[2]),
@@ -227,14 +237,16 @@ plot_by_sd_pool <- ggplot()+
                      breaks = c(1,1.5),
                      minor_breaks = NULL)+
 labs(x = "Mean SD Normalized by Adelie To all, pooled",
-     y = "Mean SD Normalized by Chinstrap and Gentoo, pooled")
+     y = "Mean SD Normalized by Chinstrap and Gentoo, pooled") +
+  theme_classic() +
+  theme(axis.text.y = element_blank())
 plot_by_sd_pool
   
 ```
 
 This corrects the problem of directionality while still incorporating the variance of the underlying distributions. The next step we can make is by controlling for the variance in the means. Right now we are just controlling for variance in the distributions. We can use our sample size of each penguin to calculate "standard error", the expected variation within our mean value. When we normalize by standard error, we need to square the standard error around each mean, then take the square root of that sum.
 
-```{r}
+```{r }
 means <- penguin %>%
   group_by(species)%>%
   summarize(counts = n(), mean_bill_length = mean(bill_length_mm), sd_bill_length = sd(bill_length_mm) )%>%
@@ -253,7 +265,7 @@ print(paste0("Gentoo to Chinstrap Distance = ",
              (means$mean_bill_length[which(means$species == "Gentoo")] - means$mean_bill_length[which(means$species == "Chinstrap")])/sqrt(means$se_bill_length[which(means$species == "Gentoo")] + means$se_bill_length[which(means$species == "Chinstrap")])))
 ```
 
-```{r echo = FALSE}
+```{r }
 means_df <- means %>% mutate( y = c(1,1,1), x = c(
                                                   means$mean_bill_length[1]/sqrt(means$se_bill_length[1]+means$se_bill_length[2]),
                                                   means$mean_bill_length[2]/sqrt(means$se_bill_length[1]+means$se_bill_length[2]),
@@ -288,14 +300,16 @@ plot_by_se_pool <- ggplot()+
                      breaks = c(1,3),
                      minor_breaks = NULL)+
 labs(x = "Mean SE Normalized by Adelie To all, pooled",
-     y = "Mean SE Normalized by Chinstrap and Gentoo, pooled")
+     y = "Mean SE Normalized by Chinstrap and Gentoo, pooled") +
+  theme_classic() +
+  theme(axis.text.y = element_blank())
 plot_by_se_pool
   
 ```
 
-Now we get distances that don't care about direction and incorporate the underlying variance of our known means. We can see that Adelie penguins are very different from Chinstrap and Gentoo penguins, which are quite similar to each other. In fact, we stumbled upon the formulation for the two sample T-statistic. We can actually see this by doing a t test in base R. Let's do Adelie to Chinstrap Penguins.
+Now we get distances that don't care about direction and incorporate the underlying variance of our known means. We can see that Adelie penguins are very different from Chinstrap and Gentoo penguins, which are quite similar to each other. This computation is actually the two sample T-statistic. We can check this by doing a t test in base R. Let's do Adelie to Chinstrap Penguins.
 
-```{r}
+```{r }
 ad <- penguin%>%filter(species == "Adelie")
 chi <- penguin %>%filter(species == "Chinstrap")
 ge <- penguin %>%filter(species == "Gentoo")
@@ -307,30 +321,32 @@ print(paste0("the test statistic/ distance is : ",test$statistic))
 
 ```
 
-This works well. However, implicit within the definitions of standard deviation and standard error are that the data are normally distributed. Not all data sets are normally distributed. In fact, Gentoo penguins appear to be non-normal according to the Shapiro-Wilk normality test at .05 significance level. I will admit, Gentoo is normal enough that we shouldn't throw out the idea that it approximates a normal distribution.
+We get the same result
 
-```{r}
+This works well. However, implicit within the definitions of standard deviation and standard error are that the data, and their respective means, are normally distributed. Not all data sets are normally distributed. In fact, Gentoo penguins appear to be non-normal according to the Shapiro-Wilk normality test at .05 significance level. I will admit, Gentoo is normal enough that we shouldn't throw out the idea that it approximates a normal distribution. However, we should be aware that the data are not normal, and that our distance metric is not robust to non-normality.
+
+```{r }
 shapiro.test(ge$bill_length_mm)
 qqnorm(ge$bill_length_mm, pch = 1, frame = FALSE)
 qqline(ge$bill_length_mm, col = "steelblue", lwd = 2)
 ```
 
-How can we measure distance outside of the framework of simple distance, and the various forms of standardized distances?
+How can we measure distance when means may not accurately reflect our data?
 
 # Intuition and Calculation of Earth Mover's Distance.
 
-Let's take our problem and recontextualize it slightly. Instead of measuring from mean to mean, potentially adjusting by variance, lets "move" one distribution to the next, as if we are moving earth from one pile to another. We can think of the actual computation for this using children's blocks. We have a wall with 12 blocks, 6 x 2. Let's build a 2 x 6 tower from that wall moving the fewest blocks in the most efficient way. Moving vertically has no cost, but moving laterally does. The cost is 1 for a block moved one block over.
+Let's take our problem and recontextualize it slightly. Instead of measuring from mean to mean, lets "move" one distribution to the next, as if we are moving earth from one pile to another. We can think of the actual computation for this using children's blocks. We have a wall with 12 blocks, 6 x 2. Let's build two 1 x 6 towers from that wall moving the fewest blocks in the most efficient way. Moving vertically has no cost, but moving laterally does. If we move one block laterally, it costs one. 
 
 What is the effort required to make these moves using minimum effort?
 
 
-```{r conceptual}
+```{r conceptual, , fig.width = 10, fig.height = 10}
 knitr::include_graphics("Children_blocks_conceptual_model.jpg")
 ```
 
-From this simple diagram we can deduce logically that we make eight moves. Four with a cost of one, and four with a cost of two. If each block is a "mass" of 1, then we can say our effort was 12. If we reframe this to a probability mass function, then the sum of blocks is = 1, that means each block has a mass of 1/12. Our effort is now 1. Let's apply this logic to the penguins dataset. First we need to discretize our data. I'm going to choose a binwidth of 0.05 (aka dx = 0.05).
+From this simple diagram we can deduce logically that we make eight moves, each with a cost of one, our "effort" was 8. The means in this case are exactly equal, yet we clearly have different structures. If we represent probability mass functions in this matter, we can do the same computation to see how distributions differ from each other. Let's apply this logic to the penguins dataset. First we need to discretize our data. I'm going to choose a binwidth of 0.05 (aka dx = 0.05).
 
-```{r echo = FALSE}
+```{r , warning=FALSE}
 dx = 1
 bins <- seq(32,60,dx)
 
@@ -357,7 +373,9 @@ discrete_plot <- ggplot()+
 discrete_plot
 ```
 
-This shows similar information as the density plots above, but now the data is discrete and we can track how much "mass" we move and where. Next lets model the costs of moving. This can be be performed by making a matrix of costs (C) where columns indicate "from" and rows indicate "to". so the cell index [4,2] would be the cost of moving any mass from 2 to 4. In this case, let's choose the standard euclidean distance (e.g. $abs(4-2) = 2$. See "Cost Matrix Changes" in the supplementary information for more information). For illustrative simplicity, let's remove Chinstrap penguins so we only focus on one computation.
+This shows similar information as the density plots above, but now the data is discrete and we can track how much "mass" we move and where. Next lets model the costs of moving. This can be be performed by making a matrix of costs (C) where columns indicate "from" and rows indicate "to". so the cell index [4,2] would be the cost of moving any mass from 2 to 4. In this case, let's choose the standard euclidean distance (e.g. $abs(4-2) = 2$). See "[Cost Matrix Changes]" in the supplemental information). For illustrative simplicity, let's remove Chinstrap penguins so we only focus on one computation. Let's plot our distributions with a cost matrix from Adelie to Gentoo penguins.
+
+
 
 ```{r, echo = F, show.results = "hide"}
 pen_disc_ad <- pen_disc%>%
@@ -385,6 +403,7 @@ ggplot( aes(x = bin, y = rel,))+
   # ggsave("pen_disc_ge.jpg", pen_disc_ge)
 empty <- ggplot() + theme_void()
 ```
+
 ```{r, show.results = "hide"}
 n <- length(bins)
 C <- matrix(nrow = n, ncol = n)
@@ -393,6 +412,9 @@ for(i in 1:n){
     C[i,j] = sqrt((bins[i]-bins[j])^2)
   }
 }
+```
+
+```{r, }
 dimnames(C) <- list(x = bins, y = bins)
 C_df <- melt(C, value.name = "intensity")
 
@@ -420,9 +442,11 @@ plot <- ggplot(C_df) +
 knitr::include_graphics("cost_mat_marginal.jpg")
 ```
 
-Here we can see that the 1:1 line is 0. That makes sense because if we move from a place to the same place, we don't move at all. The highest costs are at the corners, where you move from the beginning of the range to the end of the range. Also note, this matrix is symmetric. Moving from 2 to 4 is equal to moving from 4 to 2. We can see from the marginal plots and the histograms above that most of the Adelie penguins are smaller than the Gentoo penguins.
+Here we can see that the 1:1 line is 0. That makes sense because if we move from a place to the same place, we don't move at all. The highest costs are at the corners, where you move from the beginning of the range to the end of the range. Also note, this matrix is symmetric. Moving from 2 to 4 is equal to moving from 4 to 2.
 
-The next step is to actually find the minimum effort to move from Adelie to Gentoo. While there are multiple ways of doing this (a few I will discuss in the supplementary information) we're going to use the standard and general approach. We are going to use a linear program solver to solve for the "transport map" that minimizes "effort". Effort is the cost multiplied by the transport map. Linear programming is a field of mathematics where the objective is to solve systems of linear equations given a minimization or maximization problem and constraints. Linear programming is used frequently in business for maximizing profits or minimizing costs given a real world constraint on resources. What we want to do is to find the transport map that minimizes the effort given the constraits that all of our first distribution moves to the second distribution (i.e. conserving mass) and that all mass moved is positive (so we don't create negative masses). In math formulation this looks like
+The next step is to actually find the minimum effort to move from Adelie to Gentoo. While there are multiple ways of doing this (I discuss one in [Entropy Regularization]) we're going to use the standard and general approach. 
+
+These types of problems --- those where we want to move "stuff" from one place to another given some goal and constraints (we want to perform it efficiently and without losing "earth") --- are suited for linear programming. We are going to use a basic linear program solver to move "earth" in such a way that minimizes the "effort" required to move from Adelie to Gentoo bill lengths. In math formulation this looks like
 
 $$\text{effort} = <T,C> = (\sum_{i = 1}^{n}{ \sum_{j=1}^{m} {T_{ij} C_{ij}}})$$
 
@@ -431,7 +455,7 @@ $$\begin{array}{ll}
 \text{subject to} & T 1 = p, T^\top 1 = q, T \ge 0 \\
 \end{array}$$
 
-T is our transport map, C is the cost matrix, and i and j are the row and column indecies. 1 is a vector of 1s that form our contraints that all of Adelie ($p$) must move to all of Gentoo ($p$). Let's construct the linear system of equations and compute the transport map using the lpsolve::lp function (code is documented in the RMD file)
+T is our transport map, C is the cost matrix, and i and j are the row and column indicies. 1 is a vector of 1s that form our contraints that all of Adelie ($p$) must move to all of Gentoo ($p$). Let's construct the linear system of equations and compute the transport map using the lpsolve::lp function.
 
 ```{r, echo = F, warning=FALSE}
 bin_df <- data.frame(bin = bins)
@@ -487,6 +511,13 @@ A <- rbind(Ap,Aq)
 dir <- rep("=",length(B))
 
 solved <- invisible(lpSolve::lp("min",c(C),A, dir,B))
+```
+```{r eval = F}
+solved <- invisible(lpSolve::lp("min",c(C),p, dir,q))
+```
+
+```{r, echo = F}
+
 
 t <- t(matrix(solved$solution, nrow = n, ncol = n))
 t_r <- rast(t)
@@ -502,14 +533,14 @@ mar <- c(6,2,7.1,3)
 #  plot(t_r, col = cb, mar = mar, pax = pax, plg = plg)
 # dev.off()
 ```
-```{r echo = FALSE}
+```{r }
 knitr::include_graphics("Transport_map_marginal.jpg")
 ```
-Here we can see that we are moving mass from the 30-45 range of Adelie to the 40-60 range of Gentoo penguins. We can see where most of our mass is moved to, and that it corresponds to the peaks of Gentoo. Now we can calculate the total effort by multiplying C by T to generate an effort map, then adding every cell together to calculate the total effort
+Here we can see that we are moving mass from the 30-45 range of Adelie to the 40-60 range of Gentoo penguins. We can see where most of our mass is moved to, and that it corresponds to the peaks of Gentoo. Now we can calculate the total effort by multiplying C by T to generate an effort map, then adding every cell together to calculate the total effort.
 
-Effort Map
+Effort Map:
 
-```{r echo = FALSE}
+```{r }
 t <- t(matrix(solved$solution, nrow = n, ncol = n)*C)
 t_r <- rast(t)
 
@@ -528,27 +559,35 @@ knitr::include_graphics("Effort_map_marginal.jpg")
 
 ```
 
-Effort
+Effort:
 
 ```{r}
 calcTmap <- sum(solved$solution*c(C))
 paste0("This is equal to sum(transport_map * C): ", calcTmap)
 ```
 
-As a sanity check, lets check our manual calculation the lpsolve:lp function's "objective function" attribut that should be equivalent.
+As a sanity check, lets check our manual calculation the lpsolve:lp function's "objective function" attribute that should be equivalent.
 
 ```{r}
 calcObj <- solved$objval
 paste0("The calculated solution is: ", calcObj)
 ```
-We can see that lpsolve::lp objval  provides the same value as calculating a transport map, multiplying by C, then summing every cell. With that information we can say that the effort from Adelie to Gentoo bill length is $8.77 \text{ Distance(mm)} $. If we compare that to our prior euclidean distance measure of 8.74, 8.77 is quite close but slightly different because the shapes of the distributions are slightly different. What we have just calculated is called the "Earth Mover's Distance" (EMD).
+We can see that lpsolve::lpobjval  provides the same value as calculating a transport map, multiplying by C, then summing every cell. With that information we can say that the effort from Adelie to Gentoo bill length is 8.77 (mm). If we compare that to our prior euclidean distance measure of 8.74, 8.77 is quite close but slightly different because the shapes of the distributions are slightly different. What we have just calculated is called the "Earth Mover's Distance" (EMD).
 
-one nice thing about this metric is that packages for calculating EMD already exist. "transport" and "emdist" both can be used to calculate the EMD.
+one nice thing about this metric is that R packages already exist. "transport" and "emdist" both can be used to calculate the EMD.
+All we need is to create a matrix where the first column contains probabilities, the second column contains locations/bin values for those probabilities.
 
 ```{r}
 dist_ad_df <- as.matrix(data.frame(weights = dist1, locations = bins))
 dist_ge_df <- as.matrix(data.frame(weights = dist2, locations = bins))
 dist_chi_df <- as.matrix(data.frame(weights = dist3, locations = bins))
+```
+```{r echo = F}
+print("Adelie example matrix")
+print(dist_ad_df)
+print("Using emdist and transport")
+```
+```{r}
 emdist_emd <-emdist::emd(dist_ad_df,dist_ge_df)
 paste0("emdist package = ", emdist_emd)
 
@@ -556,7 +595,7 @@ transport_emd <-transport::wasserstein1d(bins,bins,1,dist1,dist2)
 paste0("transport package = ", transport_emd)
 ```
 
-Let's check the distances from Adelie to Chinstrap, and Chinstrap to Gentoo
+Let's check the EMD's from Adelie to Chinstrap, and Chinstrap to Gentoo as a check
 
 ```{r echo = F}
 transport_emd <-transport::wasserstein1d(bins,bins,1,dist1,dist3)
@@ -564,14 +603,69 @@ paste0("Adelie to Chinstrap = ", transport_emd)
 transport_emd <-transport::wasserstein1d(bins,bins,1,dist2,dist3)
 paste0("Chinstrap to Gentoo = ", transport_emd)
 ```
+to jog our memory, here are the euclidean distances from earlier
 
-Again, pretty similar to the Euclidean distances, but not exactly because the distributions are not perfectly normal. These distance quite easily can be used to compare different groups in a more robust way. There is also room to further develop the metric to be more robust. The metric also works in multiple dimensions. A note on EMD in multiple dimensions, data should be converted to a gridded probability map or using the Compositional::mkde function to normalize the data by density.
+```{r echo = F}
 
-$*$if you want to see what the transport cost looks like in 2D, or you want another resource to learn about Optimal transport, the resource at this link:  [A Short Introduction to Optimal Transport and Wasserstein Distance]<http://alexhwilliams.info/itsneuronalblog/2020/10/09/optimal-transport/> 
+means <- penguin %>%
+  group_by(species)%>%
+  summarize(mean_bill_length = mean(bill_length_mm))
+
+print(paste0("Adelie to Chinstrap Distance = ",
+             means$mean_bill_length[which(means$species == "Adelie")] - means$mean_bill_length[which(means$species == "Chinstrap")]))
+
+print(paste0("Adelie to Gentoo Distance = ",
+             means$mean_bill_length[which(means$species == "Adelie")] - means$mean_bill_length[which(means$species == "Gentoo")]))
+
+print(paste0("Chinstrap to Gentoo Distance = ",
+             means$mean_bill_length[which(means$species == "Chinstrap")] - means$mean_bill_length[which(means$species == "Gentoo")]))
+
+
+means_df <- means %>% mutate(y = c(1,1,1))
+
+means_df$y[3] <- 1+means$mean_bill_length[which(means$species == "Chinstrap")] - means$mean_bill_length[which(means$species == "Gentoo")]
+means_df <- rbind(means_df, c("Adelie", means$mean_bill_length[1], means_df$y[3]))
+
+means_df$mean_bill_length <- as.numeric(means_df$mean_bill_length)
+means_df$y <- as.numeric(means_df$y)
+
+segments_startx <- c(means_df$mean_bill_length[1], means_df$mean_bill_length[1], means_df$mean_bill_length[3])
+segments_endx <- c(means_df$mean_bill_length[2], means_df$mean_bill_length[3], means_df$mean_bill_length[2])
+segments_starty <-c(means_df$y[1], means_df$y[4], means_df$y[3])
+segments_endy <- c(means_df$y[2], means_df$y[3], means_df$y[2])
+
+segments <- data.frame(startx = segments_startx, endx = segments_endx,
+                       starty = segments_starty, endy = segments_endy)
+
+
+ggplot()+
+  geom_segment(aes(x = startx, xend = endx, y = starty, yend = endy), data = segments,
+               arrow = arrow(ends = "both"))+
+  geom_point(aes(x = mean_bill_length, y = y, color = species), means_df, size = 4)+
+  annotate("text", x = 42.5, y = 1.2, label = abs(round(means_df$mean_bill_length[1]-means_df$mean_bill_length[2],2)))+
+  annotate("text", x = 42.5, y = 2, label = abs(round(means_df$mean_bill_length[4]-means_df$mean_bill_length[3],2)))+
+  annotate("text", x = 47.5, y = 1.5, label = abs(round(means_df$mean_bill_length[2]-means_df$mean_bill_length[3],2)))+
+  scale_color_manual(values = colors)+
+  scale_y_continuous(limits = c(1,5),
+                     breaks = c(1,2),
+                     minor_breaks = NULL)+
+labs(x = "Mean Length",
+     y = "Distance between Gentoo and difference in Gentoo and Chinstrap") +
+  theme_classic() +
+  theme(axis.text.y = element_blank())
+```
+
+Our EMDs are similar to the Euclidean distances, but not exactly because the distributions are not perfectly normal. These distance can be used to compare different groups in a more robust way. There is also room to further develop the metric to account for variance. The metric also works in multiple dimensions. A note on EMD in multiple dimensions, data should be converted to a gridded probability map or use the Compositional::mkde function to normalize the data by density.
+
+$*$if you want to see what the transport cost looks like in 2D, or you want another resource to learn about Optimal transport, the resource at this link:  [A Short Introduction to Optimal Transport and Wasserstein Distance](http://alexhwilliams.info/itsneuronalblog/2020/10/09/optimal-transport/)
+
+# 2D EMD
+
+Let's demonstrate what 2D EMD looks like. We will use the penguins dataset again. We will use the bill and flipper lengths between Adelie and Gentoo penguins.
 
 Bill and Flipper Length Scatter plots. 
 
-```{r}
+```{r echo = F}
 pen_2D <- penguin %>%
   ggplot(aes(x=bill_length_mm,y = flipper_length_mm, color = species))+
   geom_point()+
@@ -672,6 +766,9 @@ density_2_pg <- pgrid(density_2, boundary = bounds)
 
 ```
 
+Transport can actually create a heatmap for 2D data of how much mass we are moving where.
+Transport can also compute the EMD using weighted points, instead of a normalized grid, however it requires similar sample sizes.
+
 Heatmap of moving Adelie to Gentoo in 2D with EMD values using different implementations
 
 ```{r echo = F}
@@ -709,12 +806,12 @@ paste0("The emdist calculated EMD with points set to weight = 1 is: ", calc_2D_e
 Earth Mover's Distance (EMD; A.K.A. 1-Wasserstein metric, Kantorovich distance, Mallows Distance, Ocean Mover's distance, Fortet--Mourier distance, or minimal L$_p$ distance) is the minimum energy required to move mass (or "earth") from a distribution P to a distribution Q. 
 
 
-EMD is a special case of "Optimal Transport", specifically the "wasserstein metric". The Wasserstein metric is defined as 
+EMD is a special case of "Optimal Transport", specifically the "1-st wasserstein metric". The Wasserstein metric is defined as 
 $$\mathcal{W}_{p}(P, Q) = (\begin{matrix}inf\\\gamma \in \Gamma (P, Q) \\\end{matrix} \mathbf{E}_{(x,y) \sim \gamma}d(x,y)^p)^{1/p}
 $$
-The function is defined over a $d x d$ dimension space, so if the two distributions are 1D, the function space is 2D. $P$ and $Q$ are probability density functions. $p$ is an exponential scaling factor (A.K.A. a finite-moment). EMD is when p = 1. inf can be read as the minimum (its technically an infimum). $\Gamma(P,Q)$ is all couplings of $P$ and $Q$. $\gamma$ is a joint probability measure whose marginals are $P$ and $Q$ on the first and second factors, in effect, constraining our joint density between the two distributions to be equivalent. $\mathbf{E}_{(x,y) \sim \gamma}d(x,y)$ is the expected value of of all derivatives from P to Q. This problem can be set up  as a linear programming$^[1]$  problem for computation.
+The function is defined over a $d x d$ dimension space, so if the two distributions are 1D, the function space is 2D. $P$ and $Q$ are probability density functions. $p$ is an exponential scaling factor (A.K.A. a finite-moment). EMD is when p = 1. inf can be read as the minimum (its technically an infimum). $\Gamma(P,Q)$ is all couplings of $P$ and $Q$. $\gamma$ is a joint probability measure whose marginals are $P$ and $Q$ on the first and second factors, in effect, constraining our joint density between the two distributions to be equivalent. $\mathbf{E}_{(x,y) \sim \gamma}d(x,y)$ is the  is the expected value of of all derivatives from P to Q. This problem can be set up  as a linear programming$^[1]$  problem for computation.
 
-$^[1]$ Linear programming is solving linear systems of equations with constraints. It's usage in Optimal Transport is to constrain to real world limits, whether that be cost, distance, or other things we want to try to minimize/maximize
+$^[1]$ Linear programming is solving linear systems of equations with constraints. It's usage in our case is to ensure all of the mass from P moves to Q, and that we are trying to minimize the cost of that operation.
 
 $$\text{effort}= <T,C>^{1/p} = (\sum_{i = 1}^{n}{ \sum_{j=1}^{m} {T_{ij} C_{ij}}})^{1/p}$$
 
@@ -725,33 +822,32 @@ $$\begin{array}{ll}
 
 
 $$\begin{align}
-\sum <T,C> &= EMD \\
+\sum \langle T, C \rangle &= \text{EMD} \\
 \begin{bmatrix} 
-1\\ 
+1 \\ 
 1^\top \\
-\end{bmatrix}   T &= \begin{bmatrix}
-                    p\\
-                    q\\
-                    \end{bmatrix} \\
-                    
-\end{align}\\
-\text{Solve for T}$$
+\end{bmatrix} T &= \begin{bmatrix}
+                    p \\
+                    q \\
+                \end{bmatrix} \\
+\text{Solve for } T
+\end{align}$$
 
 Where T is a transport Matrix, C is the Cost Matrix of movement from $P$ to $Q^{[2]}$. $i$ and $j$ are the values within each matrix corresponding to a cost in C and a "move" in T. We minimize The transport plan by cost such that we don't add mass, which is what the "subject to" terms are performing. We can use a linear program solver to solve for the transport plan, and EMD is the sum of T*C. 
 
-Optimal transport has been referred to as "the natural geometry for probability measures" ([Cuturi, 2019]<https://www.youtube.com/watch?v=6iR1E6t1MMQ>)
+Optimal transport has been referred to as "the natural geometry for probability measures" ([Cuturi, 2019](https://www.youtube.com/watch?v=6iR1E6t1MMQ))
 
 
 
 
-## Entropy Regularlization
+## Entropy Regularization
 
-The calculation time for EMD scales poorly, however [Altschuler et al., 2019]<https://arxiv.org/abs/1705.09634>;  [Dvurechensky et al., 2019]<https://arxiv.org/abs/1802.04367>, and [CH 4 Peyré & Cuturi (2019)]<http://dx.doi.org/10.1561/2200000073> have introduced the usage of regularizing $<T,C$ by shannon entropy of T 
+The calculation time for EMD scales poorly, however [Altschuler et al., 2019](https://arxiv.org/abs/1705.09634);  [Dvurechensky et al., 2019](https://arxiv.org/abs/1802.04367), and [CH 4 Peyré & Cuturi (2019)](http://dx.doi.org/10.1561/2200000073) have introduced the usage of regularizing $<T,C$ by shannon entropy of T 
 $$\begin{array}{ll}
 \text{minimize T,} &  <T, C> - \epsilon H(T)\\
 \text{subject to} & T 1 = p, T^\top 1 = q, T \ge 0 \\
 \end{array}$$
-where $\epsilon >0 $ and is a regularization penalty. $H(T) = -\sum_{ij}T_{ij}\text{ }log\text{ }T{ij}$ which is the shannon entropy. As $\epsilon\rightarrow \infty $ the Transport plan approaches $p_iq_j$.  This logically makes the plan easier to solve for. The way we implement this is by subtracting off $\epsilon H(C)$ from C in our implementation. EMD is calculated by $<T*,C>$ where $T*$ is our transport plan calculated from regularized data.
+where \( \epsilon \) is a regularization penalty. $H(T) = -\sum_{ij}T_{ij}\text{ }log\text{ }T{ij}$ which is the shannon entropy. As \( \epsilon\rightarrow \infty \) the Transport plan approaches $p_iq_j$.  This logically makes the plan easier to solve for, especially with the [sinkhorn algorithm](http://arxiv.org/abs/1306.0895) The way we implement this is by subtracting off $\epsilon H(C)$ from C in our implementation. EMD is calculated by $<T*,C>$ where $T*$ is our transport plan calculated from regularized data.
 
 ```{r echo = F}
 
@@ -878,14 +974,14 @@ cex.axis = 6)
  # dev.off()
 ```
 
-```{r echo = FALSE}
+```{r }
 knitr::include_graphics("Entropy_regularization_nicer.jpg")
 ```
 
 ## Analytical solutions
 ### Univariate case
 
- When working with univariate distributions you can compute analytic solutions. The proof is beyond the scope of this document however the formulation is let $P^{-1}(u) \text{ and } Q^{-1}(u)$ be the inverse CDF of our pdfs $p(x) \text{ and } q(x)$ where u is a quantile from 0 to 1. We can define the wasserstein metric to be $(\int_{0}^{1}|P^{-1}(u) -Q^{-1}(u)|^{p}du)^{1/p}$. If $p=1$ the formula can further reduce to $(\int_{-\infty}^{\infty}|P(x) -Q(x)|dx)$ where $P(x)\text{ and }Q(x)$ are the CDF's of pdfs $p(x) \text{ and }q(x)$ which looks like
+ When working with univariate distributions you can compute analytical solutions. The [proof](http://arxiv.org/abs/1803.00567) is beyond the scope of this document however the formulation is let $P^{-1}(u) \text{ and } Q^{-1}(u)$ be the inverse CDF of our pdfs $p(x) \text{ and } q(x)$ where u is a quantile from 0 to 1. We can define the wasserstein metric to be $(\int_{0}^{1}|P^{-1}(u) -Q^{-1}(u)|^{p}du)^{1/p}$. If $p=1$ the formula can further reduce to $(\int_{-\infty}^{\infty}|P(x) -Q(x)|dx)$ where $P(x)\text{ and }Q(x)$ are the CDF's of pdfs $p(x) \text{ and }q(x)$. This is basically the absolute difference between CDF's. This process looks like the following images.
  
 ```{r }
 x <- seq(-3,3,.1)
@@ -925,7 +1021,7 @@ distribution1ToDistribution2Plot
 
 Normal CDFs with shaded absolute differences
 
-```{r}
+```{r echo = F}
  
  dist1_cdf <- pnorm(x)
 dist2_cdf <- pnorm(x, .5, .25)
@@ -982,11 +1078,13 @@ EMD is equal to the indefinite integral of the absolute difference function (in 
 
 ### Gaussian Case
 
-If we are given two 2D multivariate normal distributions with means $(\mu_{1},\mu_{2})$ and  covariances $(\Sigma_{1},\Sigma_{2})$ we can compute and analytical second order (p = 2) Wasserstein distance with $(\text{||}\mu_1-\mu_2\text{||}_2^2+\mathfrak{B}(\Sigma_1,\Sigma_2)^2)^{1/2}$ where $\mathfrak{B}$ is the Bures metric on positive-definite matrices. The Bures metric is defined as $\mathfrak{B}(\Sigma_1, \Sigma_2)^2 = 2(1-\sqrt{F(\Sigma_1,\Sigma_2)})$. $F(\Sigma_1,\Sigma2)$ is the [Fidelity Function]<https://en.wikipedia.org/wiki/Fidelity_of_quantum_states> defined as $F(\Sigma_1,\Sigma2) = [tr(\sqrt{\sqrt{\Sigma_1}\Sigma_2\sqrt{\Sigma_1}}]^2$
+If we are given two 2D multivariate normal distributions with means $(\mu_{1},\mu_{2})$ and  covariances $(\Sigma_{1},\Sigma_{2})$ we can compute and analytical second order (p = 2) Wasserstein distance with $(\text{||}\mu_1-\mu_2\text{||}_2^2+\mathfrak{B}(\Sigma_1,\Sigma_2)^2)^{1/2}$ where $\mathfrak{B}$ is the Bures metric on positive-definite matrices. The Bures metric is defined as $\mathfrak{B}(\Sigma_1, \Sigma_2)^2 = 2(1-\sqrt{F(\Sigma_1,\Sigma_2)})$. $F(\Sigma_1,\Sigma2)$ is the [Fidelity Function](https://en.wikipedia.org/wiki/Fidelity_of_quantum_states) defined as $F(\Sigma_1,\Sigma2) = [tr(\sqrt{\sqrt{\Sigma_1}\Sigma_2\sqrt{\Sigma_1}}]^2$
 
-in the Univariate normal case, we can simplify the equation to $((\mu_1-\mu_2)^2+(\sigma_1-\sigma_2)^2)^{1/2}$. in the above example that would be $((0-1)^2+(.5-.25)^2) = $ `r ((0-1)^2+(.5-.25)^2)^(1/2)`. let's check with the transport::wasserstein1D package: `r transport::wasserstein1d(x,x,2,wa = dist1,dist2)`. That is close enough because the inverse CDF method is numerically approximated and we are computing it on a discretized space, which both introduce some level of approximation. We can actually interpret this calculation  as the euclidean distance of the paramaeters in 2D, axis 1 = mean and axis 2 = standard deviation
+In the Univariate normal case, we can simplify the equation to \( ((\mu_1-\mu_2)^2+(\sigma_1-\sigma_2)^2)^{1/2} \). In the above example, that would be \( ((0-1)^2+(.5-.25)^2) = \) `r ((0-1)^2+(.5-.25)^2)^(1/2)`. Let's check with the transport::wasserstein1D package: `r transport::wasserstein1d(x,x,2,wa = dist1,dist2)`. That is close enough because the inverse CDF method is numerically approximated, and we are computing it on a discretized space, which both introduce some level of approximation. We can actually interpret this calculation as the Euclidean distance of the parameters in 2D, axis 1 = mean, and axis 2 = standard deviation.
 
-```{r}
+
+
+```{r echo = F}
 df_params <- data.frame(mean = c(0,.5), sd = c(1,.25), colors = as.factor(rev(colors)))
 
 segments <- data.frame(startx = df_params$mean[1],endx = df_params$mean[2],
@@ -1004,7 +1102,7 @@ ggplot()+
   labs(x="Mean",
        y="SD")+
   
-  theme_bw()+
+  theme_classic()+
 theme(legend.title = element_blank())
 ```
 
@@ -1031,7 +1129,7 @@ where $\phi$ and $\psi$ are a coupled joint probability, $\mu$ and $\nu$ are equ
 
 Let's reframe the initial problem. Instead of asking "how far is Adelie penguin bill length from Gentoo penguin bill length?" to "what distribution best represents all three penguins". This could be useful for assessing the average conditions, resource benefits, phenology, etc of the sampled penguins. The standard way of performing this would involve taking a simple average. The average (in black) is added to our discrete graph below. 
 
-```{r}
+```{r echo = F}
 colors <- brewer.pal(9,"Set3")[c(1,3,6, 4)]
 ave_pen_disc <- pen_disc %>%
   group_by(bin)%>%
@@ -1085,10 +1183,10 @@ barycenter_pen_disc <- full_df %>%
 # ggsave("Wass_barycenter.jpg", barycenter_pen_disc, device = "jpg", width = 7, height = 6, units = "in")
 
 ```
-```{r fig.height = 18, fig.width = 21}
+```{r fig.height = 18, fig.width = 21, echo = F}
 knitr::include_graphics("Wass_barycenter.jpg")
 ```
 
 ## Wasserstein Geodesic Principal Components Analysis (GPCA)
 
-Understanding Wasserstein GPCA we need to understand multiple layers of advanced mathematics. I will refer to [Geodesic Regression]<https://towardsdatascience.com/geodesic-regression-d0334de2d9d8> and [Principal Geodesic Analysis]<https://towardsdatascience.com/principal-geodesic-analysis-2ec7ad1b2679> for you to read and get up to speed on how to conceptualize the foundations.
+Understanding Wasserstein GPCA we need to understand multiple layers of advanced mathematics. I will refer to [Geodesic Regression](https://towardsdatascience.com/geodesic-regression-d0334de2d9d8) and [Principal Geodesic Analysis](https://towardsdatascience.com/principal-geodesic-analysis-2ec7ad1b2679) for you to read and get up to speed on how to conceptualize the foundations.
