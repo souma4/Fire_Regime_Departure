@@ -111,7 +111,7 @@ stored_data <- foreach(i = 1:length(mask_units), .export = c("mask_all","fire_pa
     name_unit <- mask_units[i]
     dir_name <- gsub(" ", "_", name_unit)
       output_name <- paste0(output_path,"/",dir_name)
-      if(write_year_raster_out != "memory" & make_figures != FALSE){
+      if(write_year_raster_out != "memory" | make_figures == TRUE){
         dir.create(output_name, showWarnings = F)
       }
     
