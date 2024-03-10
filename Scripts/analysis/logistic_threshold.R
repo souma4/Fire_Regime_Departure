@@ -3,6 +3,7 @@ library(foreach)
 library(doParallel)
 library(PresenceAbsence)
 library(ggrepel)
+#library(predicts)
 create_class <- function(mortality){
   if(is.na(mortality)){
     NA
@@ -74,11 +75,17 @@ pct_sev_classifier <- function(pct_mort){
          ifelse(pct_mort <75, "mixed",
                 ifelse(pct_mort <= 100, "high", NA)))
 }
+union_dataframes <- function(df_list) {
+  if(length(df_list) == 1) {
+    return(df_list[[1]])
+  } else {
+    return(Reduce(union_all, df_list))
+  }
+}
 
 
-
-df_1 <- read_csv("C:/Users/JChandler/Desktop/Work/Masters/Fire_Regime_departure/data/test_data/CBI_classification/Hammer_Creek_Fire_CBI.csv")
-df_2 <- read_csv("C:/Users/JChandler/Desktop/Work/Masters/Fire_Regime_departure/data/test_data/CBI_classification/GILA_Miller_Fire_CBI.csv")
+df_1 <- read_csv("C:/Users/JChandler/Desktop/Work/Masters/Fire_Regime_departure/data/thresholds/CBI_classification/Hammer_Creek_Fire_CBI.csv")
+df_2 <- read_csv("C:/Users/JChandler/Desktop/Work/Masters/Fire_Regime_departure/data/thresholds/CBI_classification/GILA_Miller_Fire_CBI.csv")
 df <- union_all(df_1,df_2)
 
 df_mutate <- df %>%
@@ -93,7 +100,8 @@ df_mutate <- df %>%
 #   geom_point()
 #pct_mortality = (pct_mortality_int+pct_mortality_big)/2 simple average
 cbi_mort_plot <- ggplot(df_mutate, aes(x = CBI_total, y = pct_mortality))+
-  geom_point()
+  geom_point() +
+  theme_bw()
 cbi_mort_plot
 
 
@@ -121,7 +129,7 @@ class_plot <- ggplot(data = df_class, aes(x=class, y = CBI_total))+
 class_plot
 
 
-##
+# lm logit ----
 #
 #
 #
@@ -148,6 +156,7 @@ n_length <- dim(df_logit_lm)[1]
 rows <- 1:n_length
 n.samples <- 10000
 models_lm <- list(length = n.samples)
+model_accuracy <- list(length = n.samples)
 set.seed(939)
 boot_threshs <- foreach(i = 1:n.samples,.combine = c,
         .export= c("df_logit_lm", "rows", "n_length"))%do%{
@@ -156,16 +165,28 @@ subsample <- sample(rows, floor(1*n_length), replace = T)
 df_logit_lm_sub <- df_logit_lm[subsample,]
 modlm.LR <- glm(as.factor(class_lm) ~ normalized, data = df_logit_lm_sub, family = "binomial")
 modlm.fit <- 100*(1-modlm.LR$deviance/modlm.LR$null.deviance)
-mod1.lm.pred <- predict(modlm.LR, type = "response")
+mod1.lm.pred <- modlm.LR$fitted.values
 mod1 <- "modlm.LR"
 dat2.lm <- data.frame(mod1 = mod1,observed = as.numeric(df_logit_lm_sub[,4]), prob = as.numeric(mod1.lm.pred))
 mod.cut.lm.GLM <- optimal.thresholds(dat2.lm, opt.methods = c("MaxKappa"))
+#calculate threshold probability
 
-threshlm <- mod.cut.lm.GLM[2]
+threshlm <- as.numeric(mod.cut.lm.GLM[2])
+
+#store model
+
 models_lm[[i]] <- modlm.LR
+
+#evaluate model accuracy
+classification <- factor(as.numeric(ifelse(dat2.lm$prob >= threshlm,1, 0)))
+mod2.cfmat <- table(dat2.lm$observed, classification)
+mod2.acc <- presence.absence.accuracy(dat2.lm, threshold = mod.cut.lm.GLM[[2]])
+tss <- mod2.acc$sensitivity + mod2.acc$specificity - 1
+mod2.acc <- cbind(mod2.acc[2:7], tss)
+model_accuracy[[i]] <- mod2.acc
+#return threshold
 return(as.numeric(threshlm))
         }
-
 
 threshold_lm_med <- quantile(boot_threshs, 0.5, names = F)
 threshold_lm_low <- quantile(boot_threshs, 0.025, names = F)
@@ -183,7 +204,9 @@ threshold_actual_lm_maxkap <- median_model_lm$CBI[which(median_model_lm$med_thre
 threshold_actual_lm_maxkap_low <- median_model_lm$CBI[which(median_model_lm$low_thresh == 1)[1]] #1.72
 threshold_actual_lm_maxkap_high <- median_model_lm$CBI[which(median_model_lm$high_thresh == 1)[1]] #1.33
 #####
-
+# model accuracy
+model_accuracy_lm <- union_dataframes(model_accuracy)
+model_accuracy_lm_means <- colMeans(model_accuracy_lm[,2:7])
 
 
 #'
@@ -209,6 +232,7 @@ n_length <- dim(df_logit_lm)[1]
 rows <- 1:n_length
 n.samples <- 10000
 models_mh <- list(length = n.samples)
+model_accuracy_mh <- list(length = n.samples)
 boot_threshs <- foreach(i = 1:n.samples,.combine = c,
                         .export= c("df_logit_mh", "rows", "n_length"))%do%{
                           subsample <- sample(rows, floor(1*n_length), replace = T)
@@ -221,9 +245,21 @@ boot_threshs <- foreach(i = 1:n.samples,.combine = c,
                           dat2.mh <- data.frame(mod1 = mod1,observed = as.numeric(df_logit_mh_sub[,4]), prob = as.numeric(mod1.mh.pred))
                           mod.cut.mh.GLM <- optimal.thresholds(dat2.mh, opt.methods = c("MaxKappa"))
                           
-                          threshlm <- mod.cut.mh.GLM[2]
+                          
+                    
+                          #store model
+                          
                           models_mh[[i]] <- modmh.LR
-                          return(as.numeric(threshlm))
+                          
+                          #evaluate model accuracy
+                          threshmh <- as.numeric(mod.cut.mh.GLM[2])
+                          classification <- factor(as.numeric(ifelse(dat2.mh$prob >= threshmh,1, 0)))
+                          mod2.cfmat <- table(dat2.mh$observed, classification)
+                          mod2.acc <- presence.absence.accuracy(dat2.mh, threshold = mod.cut.mh.GLM[[2]])
+                          tss <- mod2.acc$sensitivity + mod2.acc$specificity - 1
+                          mod2.acc <- cbind(mod2.acc[2:7], tss)
+                          model_accuracy_mh[[i]] <- mod2.acc
+                          return(as.numeric(threshmh))
                         }
 threshold_mh_med <- quantile(boot_threshs, 0.5, names = F)
 threshold_mh_low <- quantile(boot_threshs, 0.025, names = F)
@@ -244,6 +280,9 @@ threshold_actual_mh_maxkap <- median_model_mh$CBI[which(median_model_mh$med_thre
 threshold_actual_mh_maxkap_low <- median_model_mh$CBI[which(median_model_mh$low_thresh == 1)[1]] #1.92
 threshold_actual_mh_maxkap_high <- median_model_mh$CBI[which(median_model_mh$high_thresh == 1)[1]] #2.17
 ##### 
+# model accuracy
+model_accuracy_mh <- union_dataframes(model_accuracy_mh)
+model_accuracy_mh_means <- colMeans(model_accuracy_mh[,2:7])
 
 
 
@@ -270,8 +309,10 @@ pos.x = c(.6,1.77,2.6)
 
 gradientPalette <- c("#5D9543", "#A1885D", "#557D9F")
 
+save(x, des, thresholds, gradientPalette, curve, pos.x, df_mutate, category_text, file = "Figures/Final_figures/main/thresholds.RData")
 
-ggplot()+
+
+threshold_plot <- ggplot()+
   geom_ribbon(aes(x = c(0,x[1]),  ymin = 0, ymax = 100), thresholds, fill = gradientPalette[1], alpha = .4)+
   geom_ribbon(aes(x = c(x[1],x[2]),  ymin = 0, ymax = 100), thresholds, fill = gradientPalette[2], alpha = .4)+
   geom_ribbon(aes(x = c(x[2],3),  ymin = 0, ymax = 100), thresholds, fill = gradientPalette[3], alpha = .4)+
@@ -288,11 +329,14 @@ ggplot()+
 #geom_line(aes(x=x, y = High*100), multinomial_curves, size = 1.2, color = gradientPalette[3])+
   
   geom_point(aes(x=CBI_total, y = pct_mortality), df_mutate, show.legend = F) +
-  geom_text_repel(aes(x=c(1.5,2.2),y=c(50, 50), color = des, label = paste0("Threshold: ", round(x,2))), force = 70,direction = "x", show.legend = F, seed = 1, size = 4)+
+  geom_text_repel(aes(x=c(1.5,2.2),y=c(50, 50), 
+                      label = paste0("Threshold: ", round(x,2))), force = 70,
+                  color = c("#015C01",  "#1565C0" ),
+                  direction = "x", show.legend = F, seed = 1, size = 6)+
   
-  annotate("text", x = pos.x[1],  y = 105, label = category_text[1])+
-  annotate("text", x = pos.x[2],  y = 105, label = category_text[2])+
-  annotate("text", x = pos.x[3],  y = 105, label = category_text[3])+
+  annotate("text", x = pos.x[1],  y = 105, label = category_text[1], size = 6)+
+  annotate("text", x = pos.x[2],  y = 105, label = category_text[2], size = 6)+
+  annotate("text", x = pos.x[3],  y = 105, label = category_text[3], size = 6)+
 
   
   scale_y_continuous(
@@ -303,22 +347,23 @@ ggplot()+
   labs(x = "CBI") +
   guides(color = guide_legend(
     override.aes=list(shape = 0)))+
-  scale_color_manual(values = gradientPalette[c(1,3)],
+  scale_color_manual(values = gradientPalette[c(1,3,3,1)],
                      name = "Fitted Regression",
                      labels = c(expression('T'[lm]),
                                 expression('T'[mh]))) +
   
   
   
+  theme_classic() +
   theme(legend.position = "topleft",
-        legend.title = element_text(size=30),
+        legend.title = element_text(size = 30),
         legend.text = element_text(size = 25),
         axis.text = element_text(size = 25),
-        axis.title = element_text(size = 30))+
-  theme_classic()
+        axis.title = element_text(size = 30))
 
-
-
+threshold_plot
+#save
+ggsave("Figures/Final_figures/main/thresholds.jpg", threshold_plot, width = 12, height = 8, units = "in", dpi = 300)
 
 #'
 #'
@@ -856,7 +901,7 @@ auc
 
 pred3 <- performance(perf, "tpr","fpr")
 plot(pred3, main = "ROC Curve for Random Forest", col = 2, lwd = 2)
-abline(a 0, b= 1, lwd = 2, lty = 2, col = "gray")
+abline(a = 0, b= 1, lwd = 2, lty = 2, col = "gray")
 #'
 #'
 #'
