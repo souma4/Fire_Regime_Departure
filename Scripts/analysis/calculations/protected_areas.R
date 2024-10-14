@@ -1,5 +1,5 @@
 #protected areas are wilderness and NPS
-source("scripts/analysis/fire-regime-departure.R")
+source("scripts/fire-regime-departure.R")
 pkgs <- c("sampling","tidyverse", "terra", "sf", "foreach", "doParallel", "units","ggpattern","transport")
 invisible(lapply(pkgs, library, character.only = T))
 boundaries <- st_read("data/masks/cleaned/protected_areas.shp")

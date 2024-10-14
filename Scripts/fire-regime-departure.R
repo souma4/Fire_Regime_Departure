@@ -1,7 +1,7 @@
 pkgs <- c(
   "foreach", "doParallel", "tidyverse",
   "terra", "sf", "units", "RColorBrewer",
-  "data.table"
+  "data.table", "sampling", "transport"
 )
 invisible(lapply(pkgs, library, character.only = T))
 source("scripts/analysis/fire-regime-departure_helpers.R")
@@ -39,7 +39,7 @@ Calculate_fire_regime_and_departure <- function(bps_rast_path, # Path to your BP
                                                 n.iter = 100, # number of simulations to perform for each landscape
                                                 # contemporary4historical = F, #niche use. Uses contemporary fires to estimate historical fire severity. IE "If it burned today, what would it have burned like in the past". use with caution
                                                 ndvi_threshold = NA, # positive number to indicate which prefire NDVI you want to use to filter for pixels that burned in forest. Make sure your fire path folders contain pre_ndvi with the CBI_bc.tif files
-                                                buffer_tune = -150, # number to indicate a buffer around fire perims. We default to -150 to remove the outher 150 meters from fire perimeters (to asses the "core" of fires). Units are in meters
+                                                buffer_tune = 0, # number to indicate a buffer around fire perims. We default to -150 to remove the outher 150 meters from fire perimeters (to asses the "core" of fires). Units are in meters
                                                 colors2 = RColorBrewer::brewer.pal(5, "RdYlBu")[c(5, 2)], # colors for historical and contemporary comparative plots. Blue and Orange by default
                                                 n.lines = 30, # number of simulations to show in comparative plots. VERY RAM INTENSIVE
                                                 alpha.lines = .15, # Transparency of the lines from n.lines. I recommend something that allows rare events to look faded, but common event to look bold
@@ -86,8 +86,7 @@ Calculate_fire_regime_and_departure <- function(bps_rast_path, # Path to your BP
 
 
   cores <- n.cores
-  registerDoParallel(cores) # register parralel workspaces
-
+  registerDoParallel(cores)
 
   # Loop through each polygon ----
   # polygons are determined by the unique display_name values
@@ -102,6 +101,7 @@ Calculate_fire_regime_and_departure <- function(bps_rast_path, # Path to your BP
     ),
     .packages = pkgs[c(-1, -2)],
     .inorder = FALSE, .errorhandling = "pass"
+
   ) %dopar% {
     # source all of the relevant functions. MUST DO WITHIN LOOP
     module_path <- "scripts/modules/"
@@ -374,7 +374,7 @@ Calculate_fire_regime_and_departure <- function(bps_rast_path, # Path to your BP
         if (normalize_plots == T) {
           freq_compare_bar <- ggplot() +
             ggtitle(paste0(name_unit, " Frequency Bar Plot")) +
-            xlab("# Fires in 35 Years") +
+            xlab(paste0("# Fires in ", year_caps[2]-year_caps[1]," Years")) +
             ylab("Proportion of Landscape") +
             ylim(c(0, 1)) +
             scale_x_continuous(breaks = seq(-2, 10, 1)) +
@@ -422,7 +422,7 @@ Calculate_fire_regime_and_departure <- function(bps_rast_path, # Path to your BP
         } else {
           freq_compare_bar <- ggplot() +
             ggtitle(paste0(name_unit, " Frequency Bar Plot")) +
-            xlab("# Fires in 35 Years") +
+            xlab(paste0("# Fires in ", year_caps[2]-year_caps[1]," Years")) +
             ylab("Proportion of Landscape") +
             ylim(c(0, 1)) +
             scale_x_continuous(breaks = seq(0, 15, 1)) +
@@ -864,11 +864,15 @@ Calculate_fire_regime_and_departure <- function(bps_rast_path, # Path to your BP
         # if we are at iterations below n.lines, then add our data to the initialized plots
         # plots a given simulations results
         if (completed.freq <= n.lines & make_figures == TRUE) {
+          dx <-sort(unique(dfrequency$freq_dat$freq))
+          dx <- dx[2] - dx[1]
+          dx <- if (dx == 0) 1 else dx
+          
           freq_dat_4plot <- dfrequency$freq_dat %>%
             as.data.frame() %>%
             mutate(
-              freq_start = ifelse(time == "Historical", freq - ((freq[2] - freq[1]) / 2), freq),
-              freq_end = ifelse(time == "Contemporary", freq + ((freq[2] - freq[1]) / 2), freq)
+              freq_start = ifelse(time == "Historical", freq - (dx / 2), freq),
+              freq_end = ifelse(time == "Contemporary", freq + (dx / 2), freq)
             )
           completed.freq <- completed.freq + 1
           freq_compare_bar <- freq_compare_bar +
@@ -956,10 +960,14 @@ Calculate_fire_regime_and_departure <- function(bps_rast_path, # Path to your BP
           emd_freq_norm[k] <- NA
         }
         if (completed.freq <= n.lines & make_figures == TRUE) {
+          dx <-sort(unique(dfrequency$freq_dat$freq))
+          dx <- dx[2] - dx[1]
+          dx <- if (dx == 0) 1 else dx
+          
           freq_dat_4plot <- dfrequency$freq_dat %>%
             mutate(
-              freq_start = ifelse(time == "Historical", freq - ((freq[2] - freq[1]) / 2), freq),
-              freq_end = ifelse(time == "Contemporary", freq + ((freq[2] - freq[1]) / 2), freq)
+              freq_start = ifelse(time == "Historical", freq - (dx / 2), freq),
+              freq_end = ifelse(time == "Contemporary", freq + (dx / 2), freq)
             )
           completed.freq <- completed.freq + 1
           freq_compare_bar <- freq_compare_bar +
@@ -1182,9 +1190,10 @@ Calculate_fire_regime_and_departure <- function(bps_rast_path, # Path to your BP
     gc()
     return(c(stat_df)) # END OF LOOP
   }
-  stopImplicitCluster() # CLOSE PARALLEL WORKERS
-  return(stored_data)
+# end major loop ----
 
+stopImplicitCluster() # CLOSE PARALLEL WORKERS
+ # return(stored_data) # cutoff to check for errors
   # clean simulation modeling outputs ----
   #### take stored data and create a shapefile, joining valid data to our initial
   # masks

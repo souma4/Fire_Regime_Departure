@@ -1,4 +1,4 @@
-source("scripts/analysis/fire-regime-departure.R")
+source("scripts/fire-regime-departure.R")
 pkgs <- c("sampling","tidyverse", "terra", "sf", "foreach", "doParallel", "units")
 invisible(lapply(pkgs, library, character.only = T))
 western_states <- vect("data/masks/cleaned/wna_states.shp") %>% project("EPSG:3857")

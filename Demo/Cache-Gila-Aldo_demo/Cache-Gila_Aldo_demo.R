@@ -1,7 +1,7 @@
-source("scripts/analysis/fire-regime-departure.R")
-source("scripts/productivity/productivity_source.R")
+source("scripts/fire-regime-departure.R")
 pkgs <- c("tidyverse", "terra", "sf", "foreach",
-          "doParallel", "units", "data.table")
+          "doParallel", "units", "data.table","transport", 
+          "sampling")
 invisible(lapply(pkgs, library, character.only = T))
 boundaries <- st_read("data/masks/cleaned/wilderness_cleaned.shp") %>%
   filter(DispN == "Gila" | DispN == "Cache La Poudre" | DispN == "Aldo Leopold")
@@ -25,10 +25,7 @@ gila_cache_aldo_demo <- Calculate_fire_regime_and_departure("data/landscape_data
                                            alpha.lines = .1,
                                            p.area = 0.001,
                                            ndvi_threshold = .35,
-                                           make_figures = F)
+                                           make_figures = T)
 end <- Sys.time()
 end - start
 #gila_cache_aldo_demo
-crop_states <- st_read("data/masks/cleaned/wna_states.shp") %>%
-  filter(CODE %in% c("AZ","NM","CO"))
-summary_stats <- production_figures_analysis(gila_cache_aldo_demo,crop_states,"Demo/Cache-Gila-Aldo_demo","DispN")

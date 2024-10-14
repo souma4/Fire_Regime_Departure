@@ -1,4 +1,4 @@
-pkgs <- c("sf", "tidyverse", "terra","RColorBrewer", "tmap", "units")
+pkgs <- c("sf", "tidyverse", "terra","RColorBrewer", "tmap", "units", "doParallel", "foreach")
 invisible(lapply(pkgs, library, character.only = T))
 
 
@@ -18,7 +18,7 @@ fire_year <- foreach(j = 1:length(fire_str), .errorhandling = "pass", .combine =
   return(year)
 }
 mtbs$Fire_Year <- as.numeric(fire_year)
-st_write(mtbs,"data/landscape_data/mtbs_perims/mtbs_cleaned.shp", append = F)
+st_write(mtbs,"data/landscape_data/mtbs_perims/mtbs_cleaned.shp", layer_options = "ENCODING=UTF-8", append = F)
 # wilderness
 wildernesses <- st_read("data/masks/raw/wilderness.shp") %>%
   mutate(NAME1 = ifelse((STATE == "AZ")& (NAME1 == "Hells Canyon Wilderness"),"Hells Canyon Wilderness-AZ",NAME1),
@@ -229,4 +229,5 @@ project_areas <- st_read("data/masks/raw/firesheds/Data/Firesheds_CONUS.gdb", la
 
 writeVector(fireshed, "data/masks/cleaned/fs_fireshed.gpkg", overwrite = T)
 writeVector(project_areas, "data/masks/cleaned/fs_project_areas.gpkg", overwrite = T)
+
 

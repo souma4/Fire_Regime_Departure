@@ -1,4 +1,5 @@
 library(tidyverse)
+library(svglite)
 library(plotly)
 library(sf)
 library(viridis)
@@ -7,6 +8,8 @@ library(RColorBrewer)
 library(ggpubr)
 library(ggridges)
 library(randomcoloR)
+library(ggrepel)
+library(ggspatial)
 
 library(effectsize)
 
@@ -19,8 +22,8 @@ path_hexcel <- file.path(
 
 path_wilderness <- file.path(
   getwd(), "data", "outputs",
-  "wilderness", "wilderness_forested",
-  "!summaries", "wilderness_forested.gpkg"
+  "pas", "pas_forested",
+  "!summaries", "pas_forested.gpkg"
 )
 path_firesheds <- file.path(
   getwd(), "data", "outputs",
@@ -50,6 +53,7 @@ klamath <- priority_landscapes %>%
 mainpath <- file.path(getwd(), "figures", "Final_Figures", "main")
 appendixpath <- file.path(getwd(), "figures", "Final_Figures", "appendix")
 supplementalpath <- file.path(getwd(), "figures", "Final_Figures", "supplemental")
+outpath <- file.path(getwd(), "figures", "Final_Figures")
 
 percent_lessfrequent_moresevere <- df_joined %>%
   as.data.frame() %>%
@@ -60,12 +64,14 @@ percent_lessfrequent_moresevere <- df_joined %>%
   ) %>%
   group_by(freq_dir, sev_dir) %>%
   summarize(n = n()) %>%
-  mutate(rel_freq = n / sum(n))
+  ungroup() %>%
+  mutate(rel_freq = n/ sum(n))
 
 # Main Maps ----
 study_area <- ggplot() +
   geom_sf(data = states_df, fill = "grey90", color = "black") +
   geom_sf(data = df_joined, fill = "grey40", color = "black") +
+  annotation_scale(location = "bl", width_hint = 0.5, style = "ticks") +
   theme_bw()
 ggsave(paste0(mainpath, "/study_area.jpeg"), study_area, width = 8, height = 6, units = "in")
 
@@ -73,44 +79,27 @@ fireRegimeDeparture_plot <- ggplot() +
   geom_sf(data = states_df, fill = "grey90", color = "black") +
   geom_sf(data = df_joined, aes(fill = emd_both), linewidth = 0) +
   scale_fill_viridis_c(option = "A") +
-  labs(fill = "Fire-regime\ndepature") +
-  theme_bw() +
-  theme(plot.margin = margin(0.1, 0.1, 1, 0, "cm"),
-        axis.text = element_text(size = 10),
-        legend.text = element_text(size = 12))
+  labs(fill = "Fire regime departure") +
+  theme_minimal() +
+  theme(plot.margin = ggplot2::margin(0.1, 0.1, 1, 0, "cm"),
+        axis.text = element_blank(),
+        legend.text = element_text(size = 12),
+        legend.position = "bottom")
 
-klamath_departure_plot <- ggplot() +
-  geom_sf(data = states_df, fill = "grey90", color = "black", linewidth = 0.05) +
-  geom_sf(data = firesheds, aes(fill = emd_both), linewidth = 0) +
-  geom_sf(data = klamath, alpha = 0, color = "black", linewidth = 1) +
-  scale_fill_viridis_c(option = "A") +
-  labs(fill = "Fire-regime\ndepature") +
-  theme_bw() +
-  theme(plot.margin = margin(0.1, 0.1, 1, 0, "cm")) +
-  coord_sf(xlim = c(-125, -119), ylim = c(39, 43.5), crs = st_crs(4326))
  #ggsave(paste0(mainpath, "/klamath_departure.jpeg"), klamath_departure_plot, width = 10, height = 10, units = "in")
-fireshed_departure_plot <- ggplot() +
-  geom_sf(data = states_df, fill = "grey90", color = "black", linewidth = 0.05) +
-  geom_sf(data = firesheds, aes(fill = emd_both), linewidth = 0) +
-  geom_sf(data = priority_landscapes, alpha = 0, color = "#1B55FF", linewidth = 0.6) +
-  scale_fill_viridis_c(option = "A") +
-  labs(fill = "Fire-Regime\nDepature") +
-  theme_bw() +
-  theme(plot.margin = margin(0.1, 0.1, 1, 0, "cm")) 
-# ggsave(paste0(mainpath, "/fireshed_departure.jpeg"), fireshed_departure_plot, width = 10, height = 10, units = "in")
 
+#fireshed departure plot
 
-
-frccDeparture_plot <- ggplot() +
+fireshedDeparture_plot <- ggplot() +
   geom_sf(data = states_df, fill = "grey90", color = "black") +
-  geom_sf(data = df_joined, aes(fill = FRCC_reg_dep), linewidth = 0) +
+  geom_sf(data = firesheds, aes(fill = emd_both), linewidth = 0) +
   scale_fill_viridis_c(option = "A") +
-  labs(fill = "FRCC  Depature") +
-  theme_bw() +
-  theme(
-    plot.margin = margin(0.1, 0.1, 0.1, 0, "cm"),
-    legend.title = element_text(size = 14)
-  )
+  labs(fill = "Fire regime departure") +
+  theme_minimal() +
+  theme(plot.margin = ggplot2::margin(0.1, 0.1, 1, 0, "cm"),
+        axis.text = element_blank(),
+        legend.text = element_text(size = 12),
+        legend.position = "bottom")
 
 
 # Main boxplots ----
@@ -130,7 +119,7 @@ total_departure_boxplot <- boxplot_df %>%
   mutate(NAME = factor(NAME, levels = arrange(median_ranks, desc(emd_both_rank))$NAME)) %>%
   ggplot(aes(x = NAME, y = emd_both)) +
   geom_boxplot() +
-  labs(x = "", y = "Fire-regime departure") +
+  labs(x = "", y = "Fire regime departure") +
   theme_bw() +
   geom_hline(yintercept = 0, linetype = "solid", color = "black") +
   theme(
@@ -141,22 +130,16 @@ total_departure_boxplot <- boxplot_df %>%
     panel.grid.minor.x = element_blank(),
     legend.title = element_text(size = 14)
   )
+departure_CA2OR <- boxplot_df %>%
+  group_by(NAME) %>%
+  summarize(across(c(emd_both, signed_emd_frequency, signed_emd_severity), median))
+# what percent larger is CA to OR
+CA2OR_percent <- departure_CA2OR %>%
+  filter(NAME %in% c("California", "Oregon"))
+CA2OR_percent$emd_both[1] / CA2OR_percent$emd_both[2]
+  
+  
 
-#### figure emd_spatial
-emd_spatial <- ggarrange(fireRegimeDeparture_plot, NULL, total_departure_boxplot,
-  # frccDeparture_plot, NULL, frcc_departure_boxplot,
-  ncol = 3,
-  # nrow = 2,
-  common.legend = FALSE,
-  widths = c(2.8, -0.05, 1.9),
-  # heights = c(1, 1),
-  labels = c(
-    "A)", "", "B)" # ,
-    #          "C", "", "D"
-  )
-)
-emd_spatial
-ggsave(paste0(mainpath, "/emd_spatial.jpg"), emd_spatial, width = 8, height = 6, units = "in")
 
 # test by state
 state_wilcox <- pairwise.wilcox.test(
@@ -164,6 +147,8 @@ state_wilcox <- pairwise.wilcox.test(
   boxplot_df$NAME,
   p.adjust.method = "bonferroni"
 )
+
+
 
 # diverging color ramp ----
 ## create color matrix
@@ -254,10 +239,9 @@ state_wilcox <- pairwise.wilcox.test(
 df_joined %>%
   filter(sign(signed_emd_frequency) == 1 & sign(signed_emd_severity) == 1) %>%
   nrow() / nrow(df_joined)
-#88% of the data is less frequent and more severe
+#89% of the data is less frequent and more severe
 
 
-<<<<<<< HEAD
 df_joined_div <- df_joined %>%
   mutate(
     color_ramp_freq_code = ifelse(signed_emd_frequency > quantile(emd_frequency, 0.5, na.rm = T, names = F), 1,
@@ -284,7 +268,6 @@ df_joined_div <- df_joined %>%
   ) %>%
   select(color_ramp_color, rgb)
 
-=======
 #diverging color ramp
 ## create color matrix
 # colmat<-function(nquantiles=10, upperleft=rgb(0,150,235, maxColorValue=255),
@@ -375,10 +358,10 @@ df_joined_div <- df_joined %>%
 
 
 df_joined_div <- df_joined %>%
-  mutate(color_ramp_freq_code = ifelse(signed_emd_frequency_normalized > quantile(emd_frequency_normalized, 0.5, na.rm = T, names = F) , 1, 
-                                       ifelse(signed_emd_frequency_normalized < -quantile(emd_frequency_normalized, 0.5, na.rm = T, names = F), -1, 0)),
-         color_ramp_sev_code = ifelse(signed_emd_severity_normalized > quantile(emd_severity_normalized, 0.5, na.rm = T, names = F) , 1,
-                                      ifelse(signed_emd_severity_normalized < -quantile(emd_severity_normalized, 0.5, na.rm = T, names = F), -1, 0)),
+  mutate(color_ramp_freq_code = ifelse(signed_emd_frequency > quantile(emd_frequency, 0.5, na.rm = T, names = F) , 1, 
+                                       ifelse(signed_emd_frequency < -quantile(emd_frequency, 0.5, na.rm = T, names = F), -1, 0)),
+         color_ramp_sev_code = ifelse(signed_emd_severity > quantile(emd_severity, 0.5, na.rm = T, names = F) , 1,
+                                      ifelse(signed_emd_severity < -quantile(emd_severity, 0.5, na.rm = T, names = F), -1, 0)),
          color_ramp_color = case_when(color_ramp_freq_code == 1 & color_ramp_sev_code == 1 ~ "#c51b7d",
                                            color_ramp_freq_code == 1 & color_ramp_sev_code == -1 ~ "#4d9221",
                                            
@@ -392,19 +375,17 @@ df_joined_div <- df_joined %>%
                                            
                                            color_ramp_freq_code == 1 & color_ramp_sev_code == 0 ~ "#fde0ef",
                                            color_ramp_freq_code == -1 & color_ramp_sev_code == 0 ~ "#fee0b6"),
-         b = (signed_emd_frequency_normalized + max(emd_frequency_normalized))/(2*max(emd_frequency_normalized)),
-         r = (signed_emd_severity_normalized + max(emd_severity_normalized))/(2*max(emd_severity_normalized)),
+         b = (signed_emd_frequency + max(emd_frequency))/(2*max(emd_frequency)),
+         r = (signed_emd_severity + max(emd_severity))/(2*max(emd_severity)),
          g = 0.5,
          rgb = rgb(r,g, -(b-1))) %>%
          select(color_ramp_color, rgb)
->>>>>>> 73085d0778a2591e4926eb2a4c1827cca53d44ef
 diverging_departure_plot <- ggplot() +
   geom_sf(data = states_df, fill = "grey90", color = "black") +
   geom_sf(data = df_joined_div, fill = df_joined_div$color_ramp_color, linewidth = 0) +
   theme_bw() +
   theme(axis.text = element_text(size = 12))
 diverging_departure_plot
-<<<<<<< HEAD
  ggsave(paste0(mainpath,"/diverging_departure_map.jpg"), plot = diverging_departure_plot, width = 8, height = 6, units = "in")
 
 quantiles_freq <- quantile(df_joined$emd_frequency, c(0.33, .66), na.rm = T, names = F)
@@ -467,14 +448,42 @@ diverging_departure_5x5 <- df_joined %>%
       color_ramp_freq_code == -1 & color_ramp_sev_code == -1 ~ "#DFC6A1" # leftdown1
     )
   )
-diverging_departure_5x5_plot <- ggplot() +
-  geom_sf(data = states_df, fill = "grey90", color = "black") +
+# test color palette
+library(colorBlindness)
+# build tiles for each color
+tile_df <- data.frame(
+  x = rep(-2:2, 5),
+  y = rep(-2:2, each = 5),
+  color = c("#b35806", "#c5a36c", "#d9f0d3", "#93c179", "#4d9221",
+            "#d89c5e", "#dfc6a1", "#e8f3e4", "#c6d5b5", "#a5b988",
+            "#fee0b6", "#faebd6", "#f7f7f7", "#faebf3", "#fde0ef",
+            "#a9839f", "#c2a8c0", "#dccee3", "#f1c6de", "#e9a3c9",
+            "#542788", "#8b66ab", "#c2a5cf", "#c360a6", "#c51b7d")
+)
+saveRDS(tile_df, paste0(mainpath, "/diverging_5x5_palette.rds"))
+tile_plot <- ggplot() +
+  geom_tile(data = tile_df, aes(x = x, y = y, fill = color), color = "black") +
+  scale_fill_identity() +
+  theme_void() +
+  theme(
+    axis.text = element_blank(),
+    plot.margin = margin(0.1, 0, 0, 0.1, "cm")
+  )
+ggsave(paste0(mainpath, "/diverging_5x5_palette.svg"), tile_plot, width = 10, height = 10, units = "in", dpi = 300)
+cvdPlot(tile_plot, c("origin", "deuteranope", "protanope", "desaturate"))
+
+diverging_departure_5x5_plot<- ggplot() +
+  geom_sf(data = states_df, fill = "grey90", color = "black", linewidth = 0.05) +
   geom_sf(data = diverging_departure_5x5, aes(fill = color_ramp_color), linewidth = 0) +
   scale_fill_identity() +
-  theme_bw()+
-  theme(axis.text = element_text(size = 12))
-diverging_departure_5x5_plot
-ggsave(paste0(mainpath, "/diverging_departure_5x5.jpg"), diverging_departure_5x5_plot, width = 10, height = 10, units = "in", dpi = 300)
+  theme_minimal()+
+  theme(
+        axis.text = element_blank(),
+        plot.margin = margin(0.1, 0, 0, 0.1, "cm"))
+  diverging_departure_5x5_fireshed_plot
+ggsave(paste0(mainpath, "/diverging_departure_5x5_priority.jpg"), diverging_departure_5x5_fireshed_plot, width = 10, height = 10, units = "in", dpi = 300)
+
+
 
 diverging_departure_continuous <- ggplot() +
   geom_sf(data = states_df, fill = "grey90", color = "black") +
@@ -545,22 +554,45 @@ diverging_departure_5x5 <- firesheds %>%
       color_ramp_freq_code == -1 & color_ramp_sev_code == -1 ~ "#DFC6A1" # leftdown1
     )
   )
-diverging_departure_5x5_klamath_plot <- ggplot() +
+diverging_departure_5x5_fireshed_plot<- ggplot() +
   geom_sf(data = states_df, fill = "grey90", color = "black", linewidth = 0.05) +
   geom_sf(data = diverging_departure_5x5, aes(fill = color_ramp_color), linewidth = 0) +
-  geom_sf(data = klamath, alpha = 0, linewidth = 1, color = "black") +
   scale_fill_identity() +
-  theme_bw()+
-  coord_sf(xlim = c(-125, -119), ylim = c(39, 43.5), crs = st_crs(4326))
-=======
+  theme_minimal()+
+  theme(
+        axis.text = element_blank(),
+        plot.margin = margin(0.1, 0, 0, 0.1, "cm"))
+  diverging_departure_5x5_fireshed_plot
+ggsave(paste0(mainpath, "/diverging_departure_5x5_priority.jpg"), diverging_departure_5x5_fireshed_plot, width = 10, height = 10, units = "in", dpi = 300)
 
+# 5x5 scatter
+diverging_5x5_scatter_fs <- ggplot() +
+  geom_point(data = diverging_departure_5x5, aes(x = signed_emd_frequency, y = signed_emd_severity, color = color_ramp_color), size = 2) +
+  scale_color_identity() +
+  geom_vline(xintercept = 0, color = "black", linetype = "dashed") +
+  geom_hline(yintercept = 0, color = "black", linetype = "dashed") +
+  theme_bw() +
+  lims(x = c(-3.5, 3.5), y = c(-3.5, 3.5)) +
+  theme(axis.text = element_text(size = 12))
+
+
+
+
+
+
+
+
+
+
+
+
+#continuous
 diverging_departure_continuous <- ggplot() +
   geom_sf(data = df_joined_div, aes(fill = rgb),linewidth = 0)+
   scale_fill_identity()+
   theme_bw()
 diverging_departure_continuous
 ggsave(paste0(outpath,"/main/diverging_departure_map.jpg"), plot = diverging_departure_plot, width = 8, height = 6, units = "in")
->>>>>>> 73085d0778a2591e4926eb2a4c1827cca53d44ef
 
 ####color palette
 d <- expand.grid(x = seq(0, 1, 0.01), y = seq(0, 1, 0.01)) %>%
@@ -581,15 +613,7 @@ ggplot(d, aes(x, y)) +
   )
 
 
-diverging_departure_5x5_fireshed_plot <- ggplot() +
-  geom_sf(data = states_df, fill = "grey90", color = "black", linewidth = 0.05) +
-  geom_sf(data = diverging_departure_5x5, aes(fill = color_ramp_color), linewidth = 0) +
-  geom_sf(data = priority_landscapes, alpha = 0, linewidth = 0.6, color = "#1B55FF") +
-  scale_fill_identity() +
-  theme_bw()
 
-diverging_departure_5x5_fireshed_plot
-#ggsave(paste0(mainpath, "/diverging_departure_5x5_priority.jpg"), diverging_departure_5x5_fireshed_plot, width = 10, height = 10, units = "in", dpi = 300)
 
 
 #### color palette
@@ -615,12 +639,29 @@ continuous_colorpallette <- ggplot(d, aes(x, y)) +
   )
 # ggsave(paste0(mainpath,"/continuous_colorpallette.jpg"), plot = continuous_colorpallette, width = 8, height = 8, units = "in")
 
+# Figure 3 -------
 
-### hexel intersections with human use ----
+#### figure emd_spatial
+emd_spatial <- ggarrange(diverging_departure_5x5_plot,  fireRegimeDeparture_plot,
+                         # frccDeparture_plot, NULL, frcc_departure_boxplot,
+                         ncol = 2,
+                         # nrow = 2,
+                         common.legend = FALSE,
+                         
+                         # heights = c(1, 1),
+                         labels = c(
+                           "A)", "B)"
+                           #          "C", "", "D"
+                         )
+)
+emd_spatial
+ggsave(paste0(mainpath, "/figure3.jpg"), emd_spatial, width = 14, height = 6, units = "in")
+
+### hexel intersections human use ----
 # wilderness NPS
 protected_area_mask <- rast("data/masks/cleaned/protected_areas_mask.tif")
 
-prop_protected_vec <- extract(protected_area_mask, vect(df_joined), fun = mean, na.rm = T)
+prop_protected_vec <- terra::extract(protected_area_mask, vect(df_joined), fun = mean, na.rm = T)
 prop_protected <- data.frame(df_joined, proportion_protected = prop_protected_vec$protected)
 
 prop_protected_percents <- prop_protected %>%
@@ -658,31 +699,32 @@ protected_area_summary <- prop_protected_percents %>%
 proportion_protected_box <- prop_protected_percents %>%
   ggplot(aes(x = quantile, y = emd_both)) +
   geom_boxplot() +
-  labs(x = "% Wilderness & National Park", y = "Mean fire-regime departure") +
-  stat_summary(fun.data = n_fun, geom = "text", size = 6) +
+  labs(x = "Percent Wilderness & National Park", y = "Mean Fire regime departure") +
+  stat_summary(fun.data = n_fun, geom = "text", size = 7) +
   ylim(0, 3.5) +
   theme_bw()+
-  theme(axis.text = element_text(size = 8*2),
-        axis.title = element_text(size = 10*2))
+  theme(axis.text = element_text(size = 8*3),
+        axis.title = element_text(size = 10*3))
 
 proportion_protected_gradient <- protected_area_summary %>%
   ggplot() +
   geom_errorbar(aes(x = quantile, ymin = low, ymax = high), width = 0.25) +
   geom_point(aes(x = quantile, y = mean_emd), size = 3) +
-  labs(x = "% Wilderness & National Park", y = "Mean fire-regime departure") +
-  geom_text(aes(x = quantile, y = 0, label = n_lab), size = 6) +
+  labs(x = "Percent Wilderness & National Park", y = "Mean Fire regime departure") +
+  geom_text(aes(x = quantile, y = 0, label = n_lab), size = 7) +
   ylim(0, 2) +
   scale_size_binned("Number of Hexels", n.breaks = 10) +
   theme_bw()+
-  theme(axis.text = element_text(size = 8*2),
-        axis.title = element_text(size = 10*2))
+  theme(axis.text = element_text(size = 8*3),
+        axis.title = element_text(size = 10*3))
+
 
 # human footprint
 human_footprint_r <- rast("data/masks/cleaned/human_footprint/wildareas-v3-1993-human-footprint.tif", lyrs = 1)
 extract_human_footprint <- df_joined %>%
   terra::vect() %>%
   terra::project(crs(human_footprint_r)) %>%
-  extract(human_footprint_r, ., fun = mean, na.rm = T)
+  terra::extract(human_footprint_r, ., fun = mean, na.rm = T)
 
 df_joined_human_footprint <- cbind(df_joined, extract_human_footprint) %>%
   rename(human_footprint = wildareas.v3.1993.human.footprint) # %>%
@@ -690,7 +732,7 @@ df_joined_human_footprint <- cbind(df_joined, extract_human_footprint) %>%
 # bins
 human_footprint_cuts <- df_joined_human_footprint %>%
   mutate(quantile = cut(human_footprint,
-    breaks = c(seq(0, 10, 2), 30),
+    breaks = c(seq(0, 10, 2), 90),
     labels = c("0-2", "2-4", "4-6", "6-8", "8-10", ">10"), include.lowest = T
   ))
 # check for ANOVA assumptions
@@ -718,23 +760,23 @@ human_footprint_summary <- human_footprint_cuts %>%
 hf_box <- human_footprint_cuts %>%
   ggplot(aes(x = quantile, y = emd_both)) +
   geom_boxplot() +
-  labs(x = "Average human footprint", y = "Mean fire-regime departure") +
-  stat_summary(fun.data = n_fun, geom = "text", size = 6) +
+  labs(x = "Average human footprint", y = "Mean Fire regime departure") +
+  stat_summary(fun.data = n_fun, geom = "text", size = 7) +
   ylim(0, 3.5) +
   theme_bw()+
-  theme(axis.text = element_text(size = 8*2),
-        axis.title = element_text(size = 10*2))
+  theme(axis.text = element_text(size = 8*3),
+        axis.title = element_text(size = 10*3))
 
 human_footprint_gradient <- human_footprint_summary %>%
   ggplot() +
   geom_errorbar(aes(x = quantile, ymin = low, ymax = high), width = 0.25) +
   geom_point(aes(x = quantile, y = mean_emd), size = 3) +
-  labs(x = "Average human footprint", y = "Mean fire-regime departure") +
-  geom_text(aes(x = quantile, y = 0, label = n_lab), size = 6) +
+  labs(x = "Average human footprint", y = "Mean Fire regime departure") +
+  geom_text(aes(x = quantile, y = 0, label = n_lab), size = 7) +
   ylim(0, 2.2) +
   theme_bw()+
-  theme(axis.text = element_text(size = 8*2),
-        axis.title = element_text(size = 10*2))
+  theme(axis.text = element_text(size = 8*3),
+        axis.title = element_text(size = 10*3))
 
 # public lands
 public_lands <- vect("data/masks/cleaned/protected_areas_database/PADUS3_0Geopackage.gpkg", layer = "PADUS3_0Designation")
@@ -780,63 +822,88 @@ prop_public_summary <- prop_public_df %>%
 proportion_public_box <- prop_public_df %>%
   ggplot(aes(x = quantile, y = emd_both)) +
   geom_boxplot() +
-  labs(x = "% public lands", y = "Mean fire-regime departure") +
-  stat_summary(fun.data = n_fun, geom = "text", size = 6) +
+  labs(x = "Percent public lands", y = "Mean Fire regime departure") +
+  stat_summary(fun.data = n_fun, geom = "text", size = 7) +
   ylim(0, 3.5) +
   theme_bw()+
-  theme(axis.text = element_text(size = 8*2),
-        axis.title = element_text(size = 10*2))
+  theme(axis.text = element_text(size = 8*3),
+        axis.title = element_text(size = 10*3))
 
 proportion_public_gradient <- prop_public_summary %>%
   ggplot() +
   geom_errorbar(aes(x = quantile, ymin = low, ymax = high), width = 0.25) +
   geom_point(aes(x = quantile, y = mean_emd), size = 3) +
-  labs(x = "% public lands", y = "Mean fire-regime departure") +
-  geom_text(aes(x = quantile, y = 0, label = n_lab), size = 6) +
+  labs(x = "Percent public lands", y = "Mean Fire regime departure") +
+  geom_text(aes(x = quantile, y = 0, label = n_lab), size = 7) +
   ylim(0, 2) +
   theme_bw()+
-  theme(axis.text = element_text(size = 8*2),
-        axis.title = element_text(size = 10*2))
+  theme(axis.text = element_text(size = 8*3),
+        axis.title = element_text(size = 10*3))
 
 # combined plot
-combined_gradient <- ggarrange(human_footprint_gradient, proportion_public_gradient,
-  proportion_protected_gradient,
-  ncol = 2, nrow = 2,
-  labels = c("A)", "B)", "C)")
-)
-ggsave(paste0(mainpath, "/human_footprint_public_lands.jpg"), combined_gradient,
-  width = 16, height = 16, units = "in", dpi = 300
+#bind rows and label by dataset
+full_df <- bind_rows(human_footprint_summary %>% mutate(dataset = "Human footprint"),
+                     prop_public_summary %>% mutate(dataset = "Public lands (%)"),
+                     protected_area_summary %>% mutate(dataset = "Protected lands (%)"))
+
+combined_gradient <- full_df %>%
+  ggplot() +
+  geom_errorbar(aes(x = quantile, ymin = low, ymax = high, color = dataset), width = 0.25, linewidth = 2) +
+  geom_point(aes(x = quantile, y = mean_emd, color = dataset), size = 4) +
+  labs(x = "", y = "Mean Fire regime departure") +
+  #geom_text(aes(x = quantile, y = 0, label = n_lab), size = 7) +
+  facet_grid(~dataset, scales = "free_x") +
+  ylim(0, 2.2) +
+  theme_bw()+
+  theme(axis.text = element_text(size = 8*3),
+        axis.title = element_text(size = 10*3)) +
+  theme(legend.position = "none") +
+  scale_color_manual(values = c("Human footprint" = "black", "Public lands (%)" = "red", "Protected lands (%)" = "blue")) +
+  theme(strip.text = element_text(size = 10*3),
+        strip.background = element_rect(fill = "#DDDDDD"))
+ggsave(paste0(mainpath, "/figure_4.pdf"), combined_gradient,
+  width = 24, height = 8, units = "in", dpi = 300
 )
 combined_box <- ggarrange(hf_box, proportion_public_box,
                                proportion_protected_box,
                                ncol = 2, nrow = 2,
                                labels = c("A)", "B)", "C)")
 )
-ggsave(paste0(mainpath, "/human_footprint_public_lands_box.jpg"), combined_box,
-       width = 16, height = 16, units = "in", dpi = 300
-)
+#ggsave(paste0(mainpath, "/human_footprint_public_lands_box.jpg"), combined_box,
+#       width = 16, height = 16, units = "in", dpi = 300
+#)
 
+#alternative plot
 
+human_footprint_cuts$proportion_public <- prop_public_df$quantile
+
+summarized <- human_footprint_cuts %>%
+  group_by(quantile, proportion_public) %>%
+  summarize(median_departure = median(emd_both))
+
+alternative_plot <- ggplot(summarized, aes(y=quantile, x = proportion_public, size = median_departure, color = median_departure)) +
+  geom_point()+
+  labs(y = "Average human footprint",
+       x = "Percent public lands") +
+  scale_size_continuous(name = "Median Fire regime departure") +
+  scale_color_viridis_c(option = "A", limits = c(0, max(df_joined$emd_both))) +
+  theme_bw()
 
 ### Fireshed plots ----
 
-combined_fireshed <- ggarrange(fireshed_departure_plot, diverging_departure_5x5_fireshed_plot, nrow = 2)
-ggsave(paste0(mainpath, "/firesheds.jpg"), combined_fireshed, width = 10, height = 20, units = "in", dpi = 300)
-combined_klamath <- ggarrange(klamath_departure_plot, diverging_departure_5x5_klamath_plot, nrow = 2)
-ggsave(paste0(mainpath, "/klamath.jpg"), combined_klamath, width = 10, height = 20, units = "in", dpi = 300)
 
 
 template <- rast(firesheds, res = 30) %>%
   rasterize(priority_landscapes, ., field = 1, background = 0)
 
-percent_priority <- terra::zonal(template, vect(firesheds), stat = "mean", na.rm = TRUE) %>%
+percent_priority <- terra::zonal(template, vect(firesheds), fun = "mean", na.rm = TRUE) %>%
   cbind(firesheds) %>%
   rename(proportion_priority = "layer")
 # split into those greater than 50%
 greaterthan_50 <- percent_priority %>%
   mutate(
     is_50priority = ifelse(proportion_priority >= 0.5, "Priority", "Non-priority"),
-    fill = ifelse(proportion_priority >= 0.5, "#ff4855", "grey90")
+    fill = ifelse(proportion_priority >= 0.5, "#ff4855", "grey40")
   )
 #check normality assumptions
 shapiro.test(greaterthan_50$emd_both) # not normal
@@ -869,24 +936,25 @@ summary(logistic)
 log_odds <- exp(coef(logistic)[2])
 logLik(logistic)
 plot(logistic$data$emd_both, logistic$fitted.values, 
-     xlab = "Fire-Regime Departure", ylab = "Probability of Priority Landscapes",
+     xlab = "Fire regime departure", ylab = "Probability of Priority Landscapes",
      type = "p", pch = 16)
 
 
 
 greater_50_plot <- ggplot(data = greaterthan_50, aes(x = is_50priority, y = emd_both, fill = fill)) +
   geom_boxplot() +
-  labs(x = "", y = "Fire-regime departure") +
+  labs(x = "", y = "Fire regime departure") +
   theme_bw() +
   scale_fill_identity() +
   geom_hline(yintercept = 0, linetype = "solid", color = "black") +
   theme(
-    axis.text.x = element_text(angle = 45, hjust = 1, size = 16),
-    axis.text.y = element_text(size = 14),
-    axis.title = element_text(size = 20),
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 26),
+    axis.text.y = element_text(size = 20),
+    axis.title = element_text(size = 26),
     panel.grid.major.x = element_blank(),
     panel.grid.minor.x = element_blank(),
-    legend.position = "none"
+    legend.position = "none",
+    plot.margin = ggplot2::margin(1,0,0,0.2, "cm")
   )
 greater_50_plot_95ci <- greater_50_plot +
   stat_summary(
@@ -898,24 +966,26 @@ greater_50_plot_95ci <- greater_50_plot +
 # save
 ggsave(paste0(mainpath, "/greaterthan_50_priority.jpg"), greater_50_plot_95ci, width = 6, height = 12, units = "in", dpi = 300)
 
-#alternative
+#Figure 5 ----
 greaterthan_50 <- st_as_sf(greaterthan_50)
 priority_landscapes_plot <- ggplot()+
   geom_sf(data = states_df, fill = "grey90", color = "black") +
   geom_sf(data = greaterthan_50, aes(fill = is_50priority), linewidth = 0) +
   scale_fill_manual(values = c( "grey40", "#ff4855"), labels = c( "Non-priority", "Priority")) +
   geom_sf(data = priority_landscapes, alpha = 0, color = "black", linewidth = 0.8)+
-  theme_bw() +
-  theme(plot.margin = margin(0.1, 0, 0.1, 0, "cm"),
-        axis.text = element_text(size = 14),
+  theme_minimal() +
+  theme(plot.margin = ggplot2::margin(0.1, 0, 0.1, -0.5, "cm"),
+        axis.text = element_blank(),,
         legend.title = element_blank(),
-        legend.text = element_text(size = 18))
+        legend.text = element_text(size = 26),
+        legend.key.size = unit(2.5, "cm"),
+        legend.margin = margin(0, 0, 0, 0))
 
-combined_fireshed_simple <- ggarrange(greater_50_plot_95ci, priority_landscapes_plot, 
-                                      ncol = 2, labels = c("A)", "B)"), widths = c(.25, 1),
-                                      font.label = list(size = 20, face = "bold"))
+combined_fireshed_simple <- ggarrange(diverging_departure_5x5_fireshed_plot, NULL,  NULL, priority_landscapes_plot, NULL, greater_50_plot_95ci,
+                                      ncol = 3, nrow = 2, labels = c("A)", "","", "B)", "", "C)"), widths = c(.95, -.05, .30),
+                                      font.label = list(size = 26, face = "bold"))
 #save
-ggsave(paste0(mainpath, "/firesheds_simple.jpg"), combined_fireshed_simple, width = 18, height = 10, units = "in", dpi = 600)
+ggsave(paste0(mainpath, "/firesheds_simple.svg"), combined_fireshed_simple, width = 18, height = 20, units = "in", dpi = 600)
 
 # Threshold plot  ----
 load(paste0(mainpath, "/thresholds.RData"))
@@ -990,12 +1060,12 @@ miller_thode <- as.data.frame(st_read("data/outputs/med_grids/sensitivity/miller
 
 # Combine all data into one data frame for plotting
 combine_dfs <- function(df_list, names) {
-  map2_dfr(df_list, names, ~ mutate(., dataset = .y))
+  map2_dfr(df_list, names, ~ dplyr::mutate(., dataset = .y))
 }
 combined_df <- bind_rows(
-  mutate(df_joined, dataset = "df_joined"),
-  mutate(census, dataset = "census"),
-  mutate(miller_thode, dataset = "miller_thode"),
+ dplyr::mutate(df_joined, dataset = "df_joined"),
+ dplyr::mutate(census, dataset = "census"),
+ dplyr::mutate(miller_thode, dataset = "miller_thode"),
   combine_dfs(n_iters, paste0("n_iters_", seq_along(n_iters))),
   combine_dfs(p_areas, paste0("p_areas_", seq_along(p_areas))),
   combine_dfs(run_sensitivity, paste0("run_sensitivity_", seq_along(run_sensitivity)))
@@ -1005,16 +1075,16 @@ combined_df <- bind_rows(
 vars <- c("emd_frequency", "emd_severity", "emd_both")
 long_df <- pivot_longer(combined_df, vars, names_to = "variable", values_to = "value") %>%
   mutate(variable = case_when(
-    variable == "emd_frequency" ~ "Frequency Departure",
-    variable == "emd_severity" ~ "Severity Departure",
-    variable == "emd_both" ~ "Fire-Regime Departure",
+    variable == "emd_frequency" ~ "Fire frequency departure",
+    variable == "emd_severity" ~ "Fire severity departure",
+    variable == "emd_both" ~ "Fire regime departure",
     TRUE ~ variable
   )) %>%
   pivot_longer(paste0(vars, "_var"), names_to = "variable_var", values_to = "value_var") %>%
   mutate(variable_var = case_when(
-    variable_var == "emd_frequency_var" ~ "Frequency Departure Variance",
-    variable_var == "emd_severity_var" ~ "Severity Departure Variance",
-    variable_var == "emd_both_var" ~ "Fire-Regime Departure Variance",
+    variable_var == "emd_frequency_var" ~ "Fire frequency departure Variance",
+    variable_var == "emd_severity_var" ~ "Fire severity departure Variance",
+    variable_var == "emd_both_var" ~ "Fire regime departure Variance",
     TRUE ~ variable_var
   ), value_var = sqrt(value_var))
 
@@ -1026,10 +1096,10 @@ areas <- as.character(c(0.001, 0.01, 0.1, 0.5))
 iter_names <- paste0("N iterations: ", iters)
 area_names <- paste0("Proportion Area: ", areas)
 run_names <- paste0("Repeated Run: ", seq_along(run_sensitivity))
-dataset_names <- c("Census", "Original", "Miller & Thode", iter_names, area_names, run_names)
+dataset_names <- c("Census", "Original", "Miller & Thode","No edge filter", "No NDVI filter", iter_names, area_names, run_names)
 
 # Density plot
-dataset_names <- c("Census", "Miller & Thode", iter_names, area_names, run_names)
+dataset_names <- c("Census", "Miller & Thode","No edge filter", "No NDVI filter", iter_names, area_names, run_names)
 # density_plot <- ggplot(long_df, aes(x = value, color = dataset)) +
 #        facet_wrap(~ variable, scales = "free") +
 #        geom_density(aes(y = after_stat(density)), alpha = 0.6) +
@@ -1087,9 +1157,9 @@ bias_df <- bind_rows(
 
 long_df_bias <- pivot_longer(bias_df, vars, names_to = "variable", values_to = "value") %>%
   mutate(variable = case_when(
-    variable == "emd_frequency" ~ "Frequency Departure",
-    variable == "emd_severity" ~ "Severity Departure",
-    variable == "emd_both" ~ "Fire-Regime Departure",
+    variable == "emd_frequency" ~ "Fire frequency departure",
+    variable == "emd_severity" ~ "Fire severity departure",
+    variable == "emd_both" ~ "Fire regime departure",
     TRUE ~ variable
   )) %>%
   mutate(dataset_class = case_when(
@@ -1130,7 +1200,7 @@ View(table_gaussian_wide)
 
 classes <- unique(long_df_bias$dataset)
 colors <- distinctColorPalette(length(classes))
-linetypes <- c("solid", "dashed", rep("dotted", 5), rep("dotdash", 4), rep("longdash", 10))
+linetypes <- c("solid", "dashed", "F1", "4C88C488", rep("dotted", 5), rep("dotdash", 4), rep("longdash", 10))
 each_variable <- unique(long_df_bias$variable)
 bias_density_plots <- vector("list", length(each_variable))
 for (i in seq_along(each_variable)) {
@@ -1139,7 +1209,7 @@ for (i in seq_along(each_variable)) {
     ggplot(aes(x = value)) +
     geom_density(show.legend = FALSE) +
     stat_density(aes(color = dataset, linetype = dataset), geom = "line", position = "identity") +
-    labs(x = paste0(str_to_sentence(each_variable[i]), " bias"), y = "") +
+    labs(x = paste0(each_variable[i], " bias"), y = "") +
     scale_color_manual(
       name = "Dataset",
       values = colors,
@@ -1167,7 +1237,7 @@ bias_density_plots[[3]] <- bias_density_plots[[3]] +
 bias_density_plot_window <- bias_density_plots[[3]] +
   coord_cartesian(xlim = c(-0.4, 0), ylim = c(0, 1))
 combined_bias <- ggarrange(bias_density_plots[[1]], bias_density_plots[[2]], bias_density_plots[[3]], bias_density_plot_window, ncol = 4, nrow = 1, common.legend = TRUE)
-ggsave(filename = paste0(appendixpath, "/sensitivity/bias_density_window.jpg"), plot = combined_bias, width = 12, height = 6, units = "in")
+ggsave(filename = paste0(appendixpath, "/sensitivity/bias_density_window.jpg"), plot = combined_bias, width = 12, height = 6, units = "in", dpi = 600)
 
 # Calculate the mean bias for each dataset then convert to long format
 mean_bias <- bias_df %>%
@@ -1176,9 +1246,9 @@ mean_bias <- bias_df %>%
   summarise(across(c(emd_frequency, emd_severity, emd_both), mean, na.rm = TRUE)) %>%
   pivot_longer(cols = c(emd_frequency, emd_severity, emd_both), names_to = "variable", values_to = "mean") %>%
   mutate(variable = case_when(
-    variable == "emd_frequency" ~ "Frequency Departure",
-    variable == "emd_severity" ~ "Severity Departure",
-    variable == "emd_both" ~ "Fire-Regime Departure",
+    variable == "emd_frequency" ~ "Fire frequency departure",
+    variable == "emd_severity" ~ "Fire severity departure",
+    variable == "emd_both" ~ "Fire regime departure",
     TRUE ~ variable
   )) %>%
   mutate(x = ifelse(grepl("N iterations", dataset), as.numeric(gsub("N iterations: ", "", dataset)),
@@ -1201,9 +1271,9 @@ sd_bias <- bias_df %>%
   summarise(across(c(emd_frequency, emd_severity, emd_both), sd, na.rm = TRUE)) %>%
   pivot_longer(cols = c(emd_frequency, emd_severity, emd_both), names_to = "variable", values_to = "sd") %>%
   mutate(variable = case_when(
-    variable == "emd_frequency" ~ "Frequency Departure",
-    variable == "emd_severity" ~ "Severity Departure",
-    variable == "emd_both" ~ "Fire-Regime Departure",
+    variable == "emd_frequency" ~ "Fire frequency departure",
+    variable == "emd_severity" ~ "Fire severity departure",
+    variable == "emd_both" ~ "Fire regime departure",
     TRUE ~ variable
   )) %>%
   right_join(mean_bias, by = c("dataset", "variable"))
@@ -1214,9 +1284,9 @@ n_bias <- bias_df %>%
   summarise(across(c(emd_frequency, emd_severity, emd_both), ~ n())) %>%
   pivot_longer(cols = c(emd_frequency, emd_severity, emd_both), names_to = "variable", values_to = "n") %>%
   mutate(variable = case_when(
-    variable == "emd_frequency" ~ "Frequency Departure",
-    variable == "emd_severity" ~ "Severity Departure",
-    variable == "emd_both" ~ "Fire-Regime Departure",
+    variable == "emd_frequency" ~ "Fire frequency departure",
+    variable == "emd_severity" ~ "Fire severity departure",
+    variable == "emd_both" ~ "Fire regime departure",
     TRUE ~ variable
   )) %>%
   right_join(sd_bias, by = c("dataset", "variable"))
@@ -1255,7 +1325,8 @@ ggsave(filename = paste0(appendixpath, "/sensitivity/bias_plot.jpg"), plot = mea
 
 
 
-## supplemental ----
+# supplemental ----
+
 
 
 
@@ -1310,7 +1381,7 @@ for (i in seq_along(supplement_boxplot_df)) {
     mutate(NAME = factor(NAME, levels = arrange(median_ranks_supp[[i]], desc(emd_both_rank))$NAME)) %>%
     ggplot(aes(x = NAME, y = emd_both)) +
     geom_boxplot() +
-    labs(x = "", y = "Fire-regime departure") +
+    labs(x = "", y = "Fire regime departure") +
     theme_bw() +
     geom_hline(yintercept = 0, linetype = "solid", color = "black") +
     theme(
@@ -1326,7 +1397,7 @@ for (i in seq_along(supplement_boxplot_df)) {
     mutate(NAME = factor(NAME, levels = arrange(median_ranks_supp[[i]], desc(signed_emd_frequency_rank))$NAME)) %>%
     ggplot(aes(x = NAME, y = signed_emd_frequency)) +
     geom_boxplot() +
-    labs(x = "", y = "Frequency departure") +
+    labs(x = "", y = "Fire frequency departure") +
     theme_bw() +
     geom_hline(yintercept = 0, linetype = "solid", color = "black") +
     theme(
@@ -1342,7 +1413,7 @@ for (i in seq_along(supplement_boxplot_df)) {
     mutate(NAME = factor(NAME, levels = arrange(median_ranks_supp[[i]], desc(signed_emd_severity_rank))$NAME)) %>%
     ggplot(aes(x = NAME, y = signed_emd_severity)) +
     geom_boxplot() +
-    labs(x = "", y = "Severity departure") +
+    labs(x = "", y = "Fire severity departure") +
     theme_bw() +
     geom_hline(yintercept = 0, linetype = "solid", color = "black") +
     theme(
@@ -1353,65 +1424,65 @@ for (i in seq_along(supplement_boxplot_df)) {
   # ggsave(paste0(supplementalpath,"/",other_dataset_names[[i]],"_emd_boxplot.jpg"), plot = total_departure_boxplot_supplemental[[i]], width = 8, height = 6, units = "in")
 }
 
-## FRCC boxplots ----
-FRCC_reg_dep_boxplot_supplemental <- vector("list", length = length(other_datasets))
-for (i in seq_along(supplement_boxplot_df)) {
-  FRCC_reg_dep_boxplot_supplemental[[i]] <- supplement_boxplot_df[[i]] %>%
-    mutate(NAME = factor(NAME, levels = arrange(median_ranks_supp[[i]], desc(FRCC_reg_dep_rank))$NAME)) %>%
-    ggplot(aes(x = NAME, y = FRCC_reg_dep)) +
-    geom_boxplot() +
-    labs(x = "", y = "FRCC departure") +
-    theme_bw() +
-    geom_hline(yintercept = 0, linetype = "solid", color = "black") +
-    theme(
-      axis.text.x = element_text(angle = 45, hjust = 1),
-      panel.grid.major.x = element_blank(),
-      panel.grid.minor.x = element_blank()
-    )
-  # ggsave(paste0(supplementalpath,"/",other_dataset_names[[i]],"_emd_boxplot.jpg"), plot = total_departure_boxplot_supplemental[[i]], width = 8, height = 6, units = "in")
-}
-
-FRCC_freq_dep_boxplot_supplemental <- vector("list", length = length(other_datasets))
-for (i in seq_along(supplement_boxplot_df)) {
-  FRCC_freq_dep_boxplot_supplemental[[i]] <- supplement_boxplot_df[[i]] %>%
-    mutate(NAME = factor(NAME, levels = arrange(median_ranks_supp[[i]], desc(FRCC_freq_dep_rank))$NAME)) %>%
-    ggplot(aes(x = NAME, y = FRCC_freq_dep)) +
-    geom_boxplot() +
-    labs(x = "", y = "FRCC frequency departure") +
-    theme_bw() +
-    geom_hline(yintercept = 0, linetype = "solid", color = "black") +
-    theme(
-      axis.text.x = element_text(angle = 45, hjust = 1),
-      panel.grid.major.x = element_blank(),
-      panel.grid.minor.x = element_blank()
-    )
-  # ggsave(paste0(supplementalpath,"/",other_dataset_names[[i]],"_emd_boxplot.jpg"), plot = total_departure_boxplot_supplemental[[i]], width = 8, height = 6, units = "in")
-}
-
-FRCC_sev_dep_boxplot_supplemental <- vector("list", length = length(other_datasets))
-for (i in seq_along(supplement_boxplot_df)) {
-  FRCC_sev_dep_boxplot_supplemental[[i]] <- supplement_boxplot_df[[i]] %>%
-    mutate(NAME = factor(NAME, levels = arrange(median_ranks_supp[[i]], desc(FRCC_sev_dep_rank))$NAME)) %>%
-    ggplot(aes(x = NAME, y = FRCC_sev_dep)) +
-    geom_boxplot() +
-    labs(x = "", y = "FRCC severity departure") +
-    theme_bw() +
-    geom_hline(yintercept = 0, linetype = "solid", color = "black") +
-    theme(
-      axis.text.x = element_text(angle = 45, hjust = 1),
-      panel.grid.major.x = element_blank(),
-      panel.grid.minor.x = element_blank()
-    )
-  # ggsave(paste0(supplementalpath,"/",other_dataset_names[[i]],"_emd_boxplot.jpg"), plot = total_departure_boxplot_supplemental[[i]], width = 8, height = 6, units = "in")
-}
+# ## FRCC boxplots ----
+# FRCC_reg_dep_boxplot_supplemental <- vector("list", length = length(other_datasets))
+# for (i in seq_along(supplement_boxplot_df)) {
+#   FRCC_reg_dep_boxplot_supplemental[[i]] <- supplement_boxplot_df[[i]] %>%
+#     mutate(NAME = factor(NAME, levels = arrange(median_ranks_supp[[i]], desc(FRCC_reg_dep_rank))$NAME)) %>%
+#     ggplot(aes(x = NAME, y = FRCC_reg_dep)) +
+#     geom_boxplot() +
+#     labs(x = "", y = "FRCC departure") +
+#     theme_bw() +
+#     geom_hline(yintercept = 0, linetype = "solid", color = "black") +
+#     theme(
+#       axis.text.x = element_text(angle = 45, hjust = 1),
+#       panel.grid.major.x = element_blank(),
+#       panel.grid.minor.x = element_blank()
+#     )
+#   # ggsave(paste0(supplementalpath,"/",other_dataset_names[[i]],"_emd_boxplot.jpg"), plot = total_departure_boxplot_supplemental[[i]], width = 8, height = 6, units = "in")
+# }
+# 
+# FRCC_freq_dep_boxplot_supplemental <- vector("list", length = length(other_datasets))
+# for (i in seq_along(supplement_boxplot_df)) {
+#   FRCC_freq_dep_boxplot_supplemental[[i]] <- supplement_boxplot_df[[i]] %>%
+#     mutate(NAME = factor(NAME, levels = arrange(median_ranks_supp[[i]], desc(FRCC_freq_dep_rank))$NAME)) %>%
+#     ggplot(aes(x = NAME, y = FRCC_freq_dep)) +
+#     geom_boxplot() +
+#     labs(x = "", y = "FRCC frequency departure") +
+#     theme_bw() +
+#     geom_hline(yintercept = 0, linetype = "solid", color = "black") +
+#     theme(
+#       axis.text.x = element_text(angle = 45, hjust = 1),
+#       panel.grid.major.x = element_blank(),
+#       panel.grid.minor.x = element_blank()
+#     )
+#   # ggsave(paste0(supplementalpath,"/",other_dataset_names[[i]],"_emd_boxplot.jpg"), plot = total_departure_boxplot_supplemental[[i]], width = 8, height = 6, units = "in")
+# }
+# 
+# FRCC_sev_dep_boxplot_supplemental <- vector("list", length = length(other_datasets))
+# for (i in seq_along(supplement_boxplot_df)) {
+#   FRCC_sev_dep_boxplot_supplemental[[i]] <- supplement_boxplot_df[[i]] %>%
+#     mutate(NAME = factor(NAME, levels = arrange(median_ranks_supp[[i]], desc(FRCC_sev_dep_rank))$NAME)) %>%
+#     ggplot(aes(x = NAME, y = FRCC_sev_dep)) +
+#     geom_boxplot() +
+#     labs(x = "", y = "FRCC Fire severity departure") +
+#     theme_bw() +
+#     geom_hline(yintercept = 0, linetype = "solid", color = "black") +
+#     theme(
+#       axis.text.x = element_text(angle = 45, hjust = 1),
+#       panel.grid.major.x = element_blank(),
+#       panel.grid.minor.x = element_blank()
+#     )
+#   # ggsave(paste0(supplementalpath,"/",other_dataset_names[[i]],"_emd_boxplot.jpg"), plot = total_departure_boxplot_supplemental[[i]], width = 8, height = 6, units = "in")
+# }
 
 # combined into 6 panel plot
 combined_boxplot_supplemental <- vector("list", length = length(other_datasets))
 for (i in seq_along(combined_boxplot_supplemental)) {
-  combined_boxplot_supplemental[[i]] <- ggarrange(frequency_departure_boxplot_supplemental[[i]], FRCC_freq_dep_boxplot_supplemental[[i]],
-    severity_departure_boxplot_supplemental[[i]], FRCC_sev_dep_boxplot_supplemental[[i]],
-    total_departure_boxplot_supplemental[[i]], FRCC_reg_dep_boxplot_supplemental[[i]],
-    ncol = 2, nrow = 3
+  combined_boxplot_supplemental[[i]] <- ggarrange(frequency_departure_boxplot_supplemental[[i]],# FRCC_freq_dep_boxplot_supplemental[[i]],
+    severity_departure_boxplot_supplemental[[i]], #FRCC_sev_dep_boxplot_supplemental[[i]],
+    total_departure_boxplot_supplemental[[i]], #FRCC_reg_dep_boxplot_supplemental[[i]],
+    ncol = 1, nrow = 3
   )
   ggsave(paste0(supplementalpath, "/", other_dataset_names[i], "_emd_boxplots.jpg"), plot = combined_boxplot_supplemental[[i]], width = 10, height = 15, units = "in")
 }
@@ -1425,9 +1496,9 @@ for (i in seq_along(other_paths)) {
     geom_sf(data = states_df, fill = "grey50", color = "black") +
     geom_sf(data = other_datasets[[i]], aes(fill = emd_both), linewidth = 0) +
     scale_fill_viridis_c(option = "A") +
-    labs(fill = "Fire-regime\ndeparture") +
+    labs(fill = "Fire regime departure") +
     theme_bw() +
-    theme(plot.margin = margin(0.1, 0.1, 1, 0, "cm"))
+    theme(plot.margin = ggplot2::margin(0.1, 0.1, 1, 0, "cm"))
   # ggsave(paste0(supplementalpath,"/",other_dataset_names[[i]],"_fireRegimeDeparture_map.jpg"), plot = supplemental_departure_plot[[i]], width = 8, height = 6, units = "in")
 }
 
@@ -1439,9 +1510,9 @@ for (i in seq_along(other_datasets)) {
     geom_sf(data = states_df, fill = "grey50", color = "black") +
     geom_sf(data = other_datasets[[i]], aes(fill = emd_frequency), linewidth = 0) +
     scale_fill_viridis_c(option = "A") +
-    labs(fill = "Fire-frequency\ndeparture") +
+    labs(fill = "Fire frequency departure") +
     theme_bw() +
-    theme(plot.margin = margin(0.1, 0.1, 1, 0, "cm"))
+    theme(plot.margin = ggplot2::margin(0.1, 0.1, 1, 0, "cm"))
   # ggsave(paste0(supplementalpath,"/",other_dataset_names[[i]],"_firefreqDeparture_map.jpg"), plot = firefreqDeparture_plot[[i]], width = 8, height = 6, units = "in")
 }
 
@@ -1452,9 +1523,9 @@ for (i in seq_along(other_datasets)) {
     geom_sf(data = states_df, fill = "grey50", color = "black") +
     geom_sf(data = other_datasets[[i]], aes(fill = emd_severity), linewidth = 0) +
     scale_fill_viridis_c(option = "A") +
-    labs(fill = "Fire-severity\ndeparture") +
+    labs(fill = "Fire severity departure") +
     theme_bw() +
-    theme(plot.margin = margin(0.1, 0.1, 1, 0, "cm"))
+    theme(plot.margin = ggplot2::margin(0.1, 0.1, 1, 0, "cm"))
   # ggsave(paste0(supplementalpath,"/",other_dataset_names[[i]],"_firefreqDeparture_map.jpg"), plot = firefreqDeparture_plot[[i]], width = 8, height = 6, units = "in")
 }
 
@@ -1470,57 +1541,57 @@ for (i in seq_along(other_paths)) {
     labs(fill = "FRCC  departure") +
     theme_bw() +
     theme(
-      plot.margin = margin(0.1, 0.1, 0.1, 0, "cm"),
+      plot.margin = ggplot2::margin(0.1, 0.1, 0.1, 0, "cm"),
       legend.title = element_text(size = 14)
     )
   # ggsave(paste0(supplementalpath,"/",other_dataset_names[[i]],"_frccDeparture_map.jpg"), plot = supplemental_frcc_dep_plot[[i]], width = 8, height = 6, units = "in")
 }
-FRCCregDeparture_plot <- vector("list", length = length(other_datasets))
-for (i in seq_along(other_datasets)) {
-  FRCCregDeparture_plot[[i]] <- ggplot() +
-    geom_sf(data = states_df, fill = "grey50", color = "black") +
-    geom_sf(data = other_datasets[[i]], aes(fill = FRCC_reg_dep), linewidth = 0) +
-    scale_fill_viridis_c(option = "A") +
-    labs(fill = "FRCC  departure") +
-    theme_bw() +
-    theme(plot.margin = margin(0.1, 0.1, 1, 0, "cm"))
-  # ggsave(paste0(supplementalpath,"/",other_dataset_names[[i]],"_FRCCregDeparture_map.jpg"), plot = FRCCregDeparture_plot[[i]], width = 8, height = 6, units = "in")
-}
-
-# map FRCC frequency emd
-FRCCfreqDeparture_plot <- vector("list", length = length(other_datasets))
-for (i in seq_along(other_datasets)) {
-  FRCCfreqDeparture_plot[[i]] <- ggplot() +
-    geom_sf(data = states_df, fill = "grey50", color = "black") +
-    geom_sf(data = other_datasets[[i]], aes(fill = FRCC_freq_dep), linewidth = 0) +
-    scale_fill_viridis_c(option = "A") +
-    labs(fill = "FRCC frequency\ndeparture") +
-    theme_bw() +
-    theme(plot.margin = margin(0.1, 0.1, 1, 0, "cm"))
-  # ggsave(paste0(supplementalpath,"/",other_dataset_names[[i]],"_FRCCfreqDeparture_map.jpg"), plot = FRCCfreqDeparture_plot[[i]], width = 8, height = 6, units = "in")
-}
-
-# map FRCC severity emd
-FRCCsevDeparture_plot <- vector("list", length = length(other_datasets))
-for (i in seq_along(other_datasets)) {
-  FRCCsevDeparture_plot[[i]] <- ggplot() +
-    geom_sf(data = states_df, fill = "grey50", color = "black") +
-    geom_sf(data = other_datasets[[i]], aes(fill = FRCC_sev_dep), linewidth = 0) +
-    scale_fill_viridis_c(option = "A") +
-    labs(fill = "FRCC severity\ndeparture") +
-    theme_bw() +
-    theme(plot.margin = margin(0.1, 0.1, 1, 0, "cm"))
-  # ggsave(paste0(supplementalpath,"/",other_dataset_names[[i]],"_FRCCsevDeparture_map.jpg"), plot = FRCCsevDeparture_plot[[i]], width = 8, height = 6, units = "in")
-}
+# FRCCregDeparture_plot <- vector("list", length = length(other_datasets))
+# for (i in seq_along(other_datasets)) {
+#   FRCCregDeparture_plot[[i]] <- ggplot() +
+#     geom_sf(data = states_df, fill = "grey50", color = "black") +
+#     geom_sf(data = other_datasets[[i]], aes(fill = FRCC_reg_dep), linewidth = 0) +
+#     scale_fill_viridis_c(option = "A") +
+#     labs(fill = "FRCC  departure") +
+#     theme_bw() +
+#     theme(plot.margin = ggplot2::margin(0.1, 0.1, 1, 0, "cm"))
+#   # ggsave(paste0(supplementalpath,"/",other_dataset_names[[i]],"_FRCCregDeparture_map.jpg"), plot = FRCCregDeparture_plot[[i]], width = 8, height = 6, units = "in")
+# }
+# 
+# # map FRCC frequency emd
+# FRCCfreqDeparture_plot <- vector("list", length = length(other_datasets))
+# for (i in seq_along(other_datasets)) {
+#   FRCCfreqDeparture_plot[[i]] <- ggplot() +
+#     geom_sf(data = states_df, fill = "grey50", color = "black") +
+#     geom_sf(data = other_datasets[[i]], aes(fill = FRCC_freq_dep), linewidth = 0) +
+#     scale_fill_viridis_c(option = "A") +
+#     labs(fill = "FRCC frequency\ndeparture") +
+#     theme_bw() +
+#     theme(plot.margin = ggplot2::margin(0.1, 0.1, 1, 0, "cm"))
+#   # ggsave(paste0(supplementalpath,"/",other_dataset_names[[i]],"_FRCCfreqDeparture_map.jpg"), plot = FRCCfreqDeparture_plot[[i]], width = 8, height = 6, units = "in")
+# }
+# 
+# # map FRCC severity emd
+# FRCCsevDeparture_plot <- vector("list", length = length(other_datasets))
+# for (i in seq_along(other_datasets)) {
+#   FRCCsevDeparture_plot[[i]] <- ggplot() +
+#     geom_sf(data = states_df, fill = "grey50", color = "black") +
+#     geom_sf(data = other_datasets[[i]], aes(fill = FRCC_sev_dep), linewidth = 0) +
+#     scale_fill_viridis_c(option = "A") +
+#     labs(fill = "FRCC severity\ndeparture") +
+#     theme_bw() +
+#     theme(plot.margin = ggplot2::margin(0.1, 0.1, 1, 0, "cm"))
+#   # ggsave(paste0(supplementalpath,"/",other_dataset_names[[i]],"_FRCCsevDeparture_map.jpg"), plot = FRCCsevDeparture_plot[[i]], width = 8, height = 6, units = "in")
+# }
 
 
 # combined into six panel plot
 departure_maps <- vector("list", length = length(other_datasets))
 for (i in seq_along(other_datasets)) {
-  departure_maps[[i]] <- ggarrange(firefreqDeparture_plot[[i]], FRCCfreqDeparture_plot[[i]],
-    firesevDeparture_plot[[i]], FRCCsevDeparture_plot[[i]],
-    supplemental_departure_plot[[i]], FRCCregDeparture_plot[[i]],
-    ncol = 2, nrow = 3
+  departure_maps[[i]] <- ggarrange(firefreqDeparture_plot[[i]], #FRCCfreqDeparture_plot[[i]],
+    firesevDeparture_plot[[i]], #FRCCsevDeparture_plot[[i]],
+    supplemental_departure_plot[[i]], #FRCCregDeparture_plot[[i]],
+    ncol = 1, nrow = 3
   )
   ggsave(paste0(supplementalpath, "/", other_dataset_names[[i]], "_departure_maps.jpg"), plot = departure_maps[[i]], width = 10, height = 15, units = "in")
 }
@@ -1534,9 +1605,9 @@ for (i in seq_along(other_paths)) {
     geom_sf(data = states_df, fill = "grey50", color = "black") +
     geom_sf(data = other_datasets[[i]], aes(fill = rank(emd_both)), linewidth = 0) +
     scale_fill_viridis_c(option = "A") +
-    labs(fill = "Fire-regime\ndeparture ranked") +
+    labs(fill = "Fire regime departure ranked") +
     theme_bw() +
-    theme(plot.margin = margin(0.1, 0.1, 1, 0, "cm"))
+    theme(plot.margin = ggplot2::margin(0.1, 0.1, 1, 0, "cm"))
   # ggsave(paste0(supplementalpath,"/",other_dataset_names[[i]],"_fireRegimeDeparture_map.jpg"), plot = supplemental_departure_plot[[i]], width = 8, height = 6, units = "in")
 }
 
@@ -1548,9 +1619,9 @@ for (i in seq_along(other_datasets)) {
     geom_sf(data = states_df, fill = "grey50", color = "black") +
     geom_sf(data = other_datasets[[i]], aes(fill = rank(emd_frequency)), linewidth = 0) +
     scale_fill_viridis_c(option = "A") +
-    labs(fill = "Fire-frequency\ndeparture ranked") +
+    labs(fill = "Fire frequency departure Ranked") +
     theme_bw() +
-    theme(plot.margin = margin(0.1, 0.1, 1, 0, "cm"))
+    theme(plot.margin = ggplot2::margin(0.1, 0.1, 1, 0, "cm"))
   # ggsave(paste0(supplementalpath,"/",other_dataset_names[[i]],"_firefreqDeparture_map.jpg"), plot = firefreqDeparture_plot[[i]], width = 8, height = 6, units = "in")
 }
 
@@ -1561,58 +1632,58 @@ for (i in seq_along(other_datasets)) {
     geom_sf(data = states_df, fill = "grey50", color = "black") +
     geom_sf(data = other_datasets[[i]], aes(fill = rank(emd_severity)), linewidth = 0) +
     scale_fill_viridis_c(option = "A") +
-    labs(fill = "Fire-severity\ndeparture ranked") +
+    labs(fill = "Fire severity departure ranked") +
     theme_bw() +
-    theme(plot.margin = margin(0.1, 0.1, 1, 0, "cm"))
+    theme(plot.margin = ggplot2::margin(0.1, 0.1, 1, 0, "cm"))
   # ggsave(paste0(supplementalpath,"/",other_dataset_names[[i]],"_firefreqDeparture_map.jpg"), plot = firefreqDeparture_plot[[i]], width = 8, height = 6, units = "in")
 }
 
 # do the same for frcc
-FRCCregDeparture_plot <- vector("list", length = length(other_datasets))
-for (i in seq_along(other_datasets)) {
-  FRCCregDeparture_plot[[i]] <- ggplot() +
-    geom_sf(data = states_df, fill = "grey50", color = "black") +
-    geom_sf(data = other_datasets[[i]], aes(fill = rank(FRCC_reg_dep)), linewidth = 0) +
-    scale_fill_viridis_c(option = "A") +
-    labs(fill = "FRCC  departure\nranked") +
-    theme_bw() +
-    theme(plot.margin = margin(0.1, 0.1, 1, 0, "cm"))
-  # ggsave(paste0(supplementalpath,"/",other_dataset_names[[i]],"_FRCCregDeparture_map.jpg"), plot = FRCCregDeparture_plot[[i]], width = 8, height = 6, units = "in")
-}
-
-# map FRCC frequency emd
-FRCCfreqDeparture_plot <- vector("list", length = length(other_datasets))
-for (i in seq_along(other_datasets)) {
-  FRCCfreqDeparture_plot[[i]] <- ggplot() +
-    geom_sf(data = states_df, fill = "grey50", color = "black") +
-    geom_sf(data = other_datasets[[i]], aes(fill = rank(FRCC_freq_dep)), linewidth = 0) +
-    scale_fill_viridis_c(option = "A") +
-    labs(fill = "FRCC frequency\ndeparture ranked") +
-    theme_bw() +
-    theme(plot.margin = margin(0.1, 0.1, 1, 0, "cm"))
-  # ggsave(paste0(supplementalpath,"/",other_dataset_names[[i]],"_FRCCfreqDeparture_map.jpg"), plot = FRCCfreqDeparture_plot[[i]], width = 8, height = 6, units = "in")
-}
-
-# map FRCC severity emd
-FRCCsevDeparture_plot <- vector("list", length = length(other_datasets))
-for (i in seq_along(other_datasets)) {
-  FRCCsevDeparture_plot[[i]] <- ggplot() +
-    geom_sf(data = states_df, fill = "grey50", color = "black") +
-    geom_sf(data = other_datasets[[i]], aes(fill = rank(FRCC_sev_dep)), linewidth = 0) +
-    scale_fill_viridis_c(option = "A") +
-    labs(fill = "FRCC severity\ndeparture ranked") +
-    theme_bw() +
-    theme(plot.margin = margin(0.1, 0.1, 1, 0, "cm"))
-  # ggsave(paste0(supplementalpath,"/",other_dataset_names[[i]],"_FRCCsevDeparture_map.jpg"), plot = FRCCsevDeparture_plot[[i]], width = 8, height = 6, units = "in")
-}
+# FRCCregDeparture_plot <- vector("list", length = length(other_datasets))
+# for (i in seq_along(other_datasets)) {
+#   FRCCregDeparture_plot[[i]] <- ggplot() +
+#     geom_sf(data = states_df, fill = "grey50", color = "black") +
+#     geom_sf(data = other_datasets[[i]], aes(fill = rank(FRCC_reg_dep)), linewidth = 0) +
+#     scale_fill_viridis_c(option = "A") +
+#     labs(fill = "FRCC  departure\nranked") +
+#     theme_bw() +
+#     theme(plot.margin = ggplot2::margin(0.1, 0.1, 1, 0, "cm"))
+#   # ggsave(paste0(supplementalpath,"/",other_dataset_names[[i]],"_FRCCregDeparture_map.jpg"), plot = FRCCregDeparture_plot[[i]], width = 8, height = 6, units = "in")
+# }
+# 
+# # map FRCC frequency emd
+# FRCCfreqDeparture_plot <- vector("list", length = length(other_datasets))
+# for (i in seq_along(other_datasets)) {
+#   FRCCfreqDeparture_plot[[i]] <- ggplot() +
+#     geom_sf(data = states_df, fill = "grey50", color = "black") +
+#     geom_sf(data = other_datasets[[i]], aes(fill = rank(FRCC_freq_dep)), linewidth = 0) +
+#     scale_fill_viridis_c(option = "A") +
+#     labs(fill = "FRCC frequency\ndeparture ranked") +
+#     theme_bw() +
+#     theme(plot.margin = ggplot2::margin(0.1, 0.1, 1, 0, "cm"))
+#   # ggsave(paste0(supplementalpath,"/",other_dataset_names[[i]],"_FRCCfreqDeparture_map.jpg"), plot = FRCCfreqDeparture_plot[[i]], width = 8, height = 6, units = "in")
+# }
+# 
+# # map FRCC severity emd
+# FRCCsevDeparture_plot <- vector("list", length = length(other_datasets))
+# for (i in seq_along(other_datasets)) {
+#   FRCCsevDeparture_plot[[i]] <- ggplot() +
+#     geom_sf(data = states_df, fill = "grey50", color = "black") +
+#     geom_sf(data = other_datasets[[i]], aes(fill = rank(FRCC_sev_dep)), linewidth = 0) +
+#     scale_fill_viridis_c(option = "A") +
+#     labs(fill = "FRCC severity\ndeparture ranked") +
+#     theme_bw() +
+#     theme(plot.margin = ggplot2::margin(0.1, 0.1, 1, 0, "cm"))
+#   # ggsave(paste0(supplementalpath,"/",other_dataset_names[[i]],"_FRCCsevDeparture_map.jpg"), plot = FRCCsevDeparture_plot[[i]], width = 8, height = 6, units = "in")
+# }
 
 # combined into six panel plot
 rank_maps <- vector("list", length = length(other_datasets))
 for (i in seq_along(other_datasets)) {
-  rank_maps[[i]] <- ggarrange(firefreqDeparture_plot[[i]], FRCCfreqDeparture_plot[[i]],
-    firesevDeparture_plot[[i]], FRCCsevDeparture_plot[[i]],
-    fireRegimeDeparture_plot[[i]], FRCCregDeparture_plot[[i]],
-    ncol = 2, nrow = 3
+   rank_maps[[i]] <- ggarrange(firefreqDeparture_plot[[i]], #FRCCfreqDeparture_plot[[i]],
+    firesevDeparture_plot[[i]], #FRCCsevDeparture_plot[[i]],
+    fireRegimeDeparture_plot[[i]], #FRCCregDeparture_plot[[i]],
+    ncol = 1, nrow = 3
   )
   ggsave(paste0(supplementalpath, "/", other_dataset_names[[i]], "_rank_maps.jpg"), plot = rank_maps[[i]], width = 10, height = 15, units = "in")
 }
@@ -1636,7 +1707,7 @@ for (i in seq_along(other_datasets)) {
     theme_bw() +
     xlim(c(0, 100)) +
     ylim(c(0, 4)) +
-    labs(x = "FRCC fire return interval departure", y = "Frequency departure") +
+    labs(x = "FRCC fire return interval departure", y = "Fire frequency departure") +
     geom_text(data = R_df, aes(x = x, y = y, label = R))
 }
 
@@ -1656,7 +1727,7 @@ for (i in seq_along(other_datasets)) {
     theme_bw() +
     xlim(c(0, 100)) +
     ylim(c(0, 4)) +
-    labs(x = "FRCC severity departure", y = "Severity departure") +
+    labs(x = "FRCC severity departure", y = "Fire severity departure") +
     geom_text(data = R_df, aes(x = x, y = y, label = R))
 }
 
@@ -1675,7 +1746,7 @@ for (i in seq_along(other_datasets)) {
     theme_bw() +
     xlim(c(0, 100)) +
     ylim(c(0, 4)) +
-    labs(x = "FRCC regime departure", y = "Fire-regime departure") +
+    labs(x = "FRCC regime departure", y = "Fire regime departure") +
     geom_vline(xintercept = 66, color = "black", linetype = "dashed") +
     geom_smooth(method = "lm", color = "red") +
     geom_text(data = R_df, aes(x = x, y = y, label = label))
@@ -1696,10 +1767,11 @@ for (i in seq_along(other_datasets)) {
 }
 
 ## EMD components ----
+
 # Signed Labels
 signed_labels <- data.frame(
-  x = c(3, 3, -3, -3),
-  y = c(4, -4, -4, 4),
+  x = c(1, 1, -1, -1)*2.5,
+  y = c(1, -1, -1, 1)*2.5,
   label = c(
     "Less frequent,\n more severe",
     "Less frequent,\n less severe",
@@ -1713,19 +1785,32 @@ signed_emd_df <- df_joined %>%
   select(name, signed_emd_frequency, signed_emd_severity) %>%
   drop_na()
 generic_emd_plot <- ggplot(signed_emd_df, aes(x = signed_emd_frequency, y = signed_emd_severity)) +
-  geom_point(alpha = 0.3) +
+  geom_point(alpha = 0.3, size = 3) +
   theme_bw() +
-  xlim(c(-4, 4)) +
-  ylim(c(-4, 4)) +
+  xlim(c(-3, 3)) +
+  ylim(c(-3, 3)) +
   labs(x = "Fire frequency departure", y = "Fire severity departure") +
   geom_vline(xintercept = 0, color = "black", linetype = "solid") +
   geom_hline(yintercept = 0, color = "black", linetype = "solid") +
-  geom_text(data = signed_labels, aes(x = x, y = y, label = label))
+  geom_text(data = signed_labels, aes(x = x, y = y, label = label), size = 24/.pt) +
+  theme(axis.title = element_text(size = 24), axis.text = element_text(size = 16))
 
 # Save the Generic EMD Plot
-save_plot_path <- file.path(mainpath, "emd_components.png")
-ggsave(save_plot_path, generic_emd_plot, width = 6, height = 6, units = "in")
+save_plot_path <- file.path(mainpath, "figure_2.pdf")
+ggsave(save_plot_path, generic_emd_plot, width = 10, height = 10, units = "in", dpi = 300)
 
+
+
+signed_labels <- data.frame(
+  x = c(3, 3, -3, -3),
+  y = c(4, -4, -4, 4),
+  label = c(
+    "Less frequent,\n more severe",
+    "Less frequent,\n less severe",
+    "More frequent,\n less severe",
+    "More frequent,\n more severe"
+  )
+)
 # Supplemental EMD Plots
 for (i in seq_along(other_datasets)) {
   signed_emd_df <- other_datasets[[i]] %>%
@@ -1750,18 +1835,139 @@ for (i in seq_along(other_datasets)) {
 
 
 
-######## MISCELANEOUS PLOTS. COULD BE INTERESTING FOR OTHERS ########
+
+
+
+# Figure 6: residual plot ------
+percentile_res <- function(x) {
+  ecdf(x)(x)
+}
+
+df_joined <- st_read(path_hexcel, quiet = T) %>%
+  st_join(states_df) %>%
+  filter(study_area_ha >= 0.5 * max(study_area_ha))
+
+
+residual_df <- df_joined %>%
+  mutate( emd_percentile = percentile_res(emd_frequency),
+          residual = (emd_percentile - percentile_res(FRCC_freq_dep))) 
+freq_bias <- data.frame( mean = mean(residual_df$residual), SD = sd(residual_df$residual),
+                         MAD = mad(residual_df$residual), MAE = mean(abs(residual_df$residual)))
+freq_res <- ggplot()+
+  geom_sf(data = states_df, fill = "grey70")+
+  geom_sf(data = residual_df, aes(fill = residual), linewidth = 0 )+
+  scale_fill_distiller(expression(Delta[percentile]), palette = "RdYlBu", limits = c(-1, 1)) +
+  theme_minimal()+
+  theme(legend.position = "right",
+        axis.text = element_blank()) 
+  labs(title = "Frequency Difference")
+
+#repeat for severity
+residual_df <- df_joined %>%
+  mutate( emd_percentile = percentile_res(emd_severity),
+          residual = (emd_percentile - percentile_res(FRCC_sev_dep)))
+sev_bias <- data.frame( mean = mean(residual_df$residual), SD = sd(residual_df$residual),
+                        MAD = mad(residual_df$residual), MAE = mean(abs(residual_df$residual)))
+sev_res <- ggplot()+
+  geom_sf(data = states_df, fill = "grey70")+
+  geom_sf(data = residual_df, aes(fill = residual), linewidth = 0 )+
+  scale_fill_distiller(expression(Delta[percentile]), palette = "RdYlBu", limits = c(-1, 1))+
+  theme_minimal()+
+  theme(legend.position = "right",
+        axis.text = element_blank())
+  labs(title = "Severity Difference")
+
+# repeat for regime
+
+residual_df <- df_joined %>%
+  mutate( emd_percentile = percentile_res(emd_both),
+          residual = (emd_percentile - percentile_res(FRCC_reg_dep)))
+reg_bias <- data.frame( mean = mean(residual_df$residual), SD = sd(residual_df$residual), 
+                        MAD = mad(residual_df$residual), MAE = mean(abs(residual_df$residual)))
+reg_res <- ggplot()+
+  geom_sf(data = states_df, fill = "grey70")+
+  geom_sf(data = residual_df, aes(fill = residual), linewidth = 0 )+
+  scale_fill_distiller(expression(Delta[percentile]), palette = "RdYlBu", limits = c(-1, 1))+
+  theme_minimal()+
+  theme(legend.position = "right",
+        axis.text = element_blank())
+  labs(title = "Fire-Regime Difference")
+
+# save the plots
+multi_res <- ggarrange(freq_res, sev_res, reg_res, ncol = 2, nrow = 2, common.legend = TRUE, legend = "right",
+                       labels = c("A)", "B)", "C)", ""))
+save_plot_path <- file.path(mainpath, "residuals.svg")
+ggsave(save_plot_path, multi_res, width = 12, height = 12, units = "in")
+  
+#build for all supplemental datasets
+
+for (i in seq_along(other_datasets)) {
+  residual_df <- other_datasets[[i]] %>%
+    mutate( emd_percentile = percentile_res(emd_frequency),
+            residual = (emd_percentile - percentile_res(FRCC_freq_dep))*100)
+  freq_res <- ggplot()+
+    geom_sf(data = states_df, fill = "grey70")+
+    geom_sf(data = residual_df, aes(fill = residual), linewidth = 0 )+
+    scale_fill_distiller(expression(Delta[percentile]), palette = "RdYlBu", limits = c(-100, 100))+
+    theme_bw()+
+    theme(legend.position = "right") +
+    labs(title = "Fire frequency departure")
+  
+  residual_df <- other_datasets[[i]] %>%
+    mutate( emd_percentile = percentile_res(emd_severity),
+            residual = (emd_percentile - percentile_res(FRCC_sev_dep))*100)
+  sev_res <- ggplot()+
+    geom_sf(data = states_df, fill = "grey70")+
+    geom_sf(data = residual_df, aes(fill = residual), linewidth = 0 )+
+    scale_fill_distiller(expression(Delta[percentile]), palette = "RdYlBu", limits = c(-100, 100))+
+    theme_bw()+
+    theme(legend.position = "right") +
+    labs(title = "Fire severity departure")
+  
+  residual_df <- other_datasets[[i]] %>%
+    mutate( emd_percentile = percentile_res(emd_both),
+            residual = (emd_percentile - percentile_res(FRCC_reg_dep))*100)
+  reg_res <- ggplot()+
+    geom_sf(data = states_df, fill = "grey70")+
+    geom_sf(data = residual_df, aes(fill = residual), linewidth = 0 )+
+    scale_fill_distiller(expression(Delta[percentile]), palette = "RdYlBu", limits = c(-100, 100))+
+    theme_bw()+
+    theme(legend.position = "right") +
+    labs(title = "Fire regime departure")
+  
+  # save the plots
+  multi_res <- ggarrange(freq_res, sev_res, reg_res, nrow = 3)
+  
+  save_plot_path <- file.path(supplementalpath, paste0(other_dataset_names[[i]], "_residuals.png"))
+  ggsave(save_plot_path, multi_res, width = 12, height = 12, units = "in")
+}
 
 
 
 
 
+######## MISCELANEOUS PLOTS. COULD BE INTERESTING FOR OTHERS ######## ----
 
 
+
+
+
+## rad plot ----
+
+
+rad_df <- df_joined %>%
+  mutate( rad_label = ifelse(emd_both <= 2, "Resist",
+                             ifelse(emd_both <=3, "Direct", "Accept")))
+rad_plot <- ggplot()+
+  geom_sf(data = states_df, fill = "grey70")+
+  geom_sf(data = rad_df, aes(fill = rad_label), linewidth = 0 )+
+  scale_fill_manual("Response", values = c(  "Accept" = "red", "Direct" = "yellow","Resist" = "lightgreen"))+
+  theme_minimal()+
+  theme(legend.position = "bottom")
 
 
 ####
-#### ridgeline plots
+#### ridgeline plot
 # total_departure_ridge <- df_joined_boxplot %>%
 #        mutate(NAME = factor(NAME, levels = arrange(median_ranks, emd_both_rank)$NAME )) %>%
 #        ggplot(aes(x = emd_both, y = NAME, fill = after_stat(x))) +
@@ -1785,7 +1991,7 @@ for (i in seq_along(other_datasets)) {
 #        values =c(0,
 #         (0-min(df_joined_boxplot$signed_emd_frequency))/(max(df_joined_boxplot$signed_emd_frequency)-min(df_joined_boxplot$signed_emd_frequency)),
 #          1)) +
-#        labs(x = "Frequency Departure", y = "") +
+#        labs(x = "Fire frequency departure", y = "") +
 #        theme_bw() +
 #        theme(
 #                      legend.position="none",
@@ -1794,7 +2000,7 @@ for (i in seq_along(other_datasets)) {
 #               )
 
 
-# # Ridge plot for severity departure
+# # Ridge plot for Fire severity departure
 # severity_departure_ridge <- df_joined_boxplot %>%
 #        mutate(NAME = factor(NAME, levels = arrange(median_ranks, signed_emd_severity_rank)$NAME )) %>%
 #        ggplot(aes(x = signed_emd_severity, y = NAME, fill = ..x..)) +
@@ -1803,7 +2009,7 @@ for (i in seq_along(other_datasets)) {
 #        values =c(0,
 #         (0-min(df_joined_boxplot$signed_emd_severity))/(max(df_joined_boxplot$signed_emd_severity)-min(df_joined_boxplot$signed_emd_severity)),
 #          1)) +
-#        labs(x = "Severity Departure", y = "") +
+#        labs(x = "Fire severity departure", y = "") +
 #        theme_bw() +
 #        theme(
 #                      legend.position="none",
