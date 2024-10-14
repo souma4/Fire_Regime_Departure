@@ -1,4 +1,4 @@
-source("scripts/analysis/fire-regime-departure.R")
+source("scripts/fire-regime-departure.R")
 pkgs <- c("sampling","tidyverse", "terra", "sf", "foreach", "doParallel", "units")
 invisible(lapply(pkgs, library, character.only = T))
 boundaries <- st_read("data/masks/cleaned/med_bps_hex.shp")
@@ -8,19 +8,7 @@ boundaries <- st_read("data/masks/cleaned/med_bps_hex.shp")
   # mutate(hex_ID = as.character(hex_ID))
 forest <- rast("data/masks/cleaned/forest_layer_both.tif")
 set.seed(1)
-med_hex_analysis <- Calculate_fire_regime_and_departure("data/landscape_data/LF2020_BPS_220_CONUS/tif/LC20_BPS_220.tif",
-                                                        "data/landscape_data/LF2020_BPS_220_CONUS/CSV_data/LF20_BPS_220.csv",
-                                                        "data/all_fires",
-                                                        boundaries,
-                                                        "data/landscape_data/mtbs_perims/mtbs_cleaned.shp",
-                                                        "data/outputs/med_grids/med_hex_all",
-                                                        "hex_ID",
-                                                        "med_hex",
-                                                        write_year_raster_out = T,
-                                                        n.cores = 6,
-                                                        n.iter = 100)
-set.seed(1)
-#temp <- boundaries[sample(1:nrow(boundaries), 10),]
+#temp <- boundaries[sample(1:nrow(boundaries), 20),]
 med_hex_forest_analysis <- Calculate_fire_regime_and_departure("data/landscape_data/LF2020_BPS_220_CONUS/tif/LC20_BPS_220.tif",
                                                         "data/landscape_data/LF2020_BPS_220_CONUS/CSV_data/LF20_BPS_220.csv",
                                                         "data/all_fires",
@@ -36,6 +24,24 @@ med_hex_forest_analysis <- Calculate_fire_regime_and_departure("data/landscape_d
                                                         n.cores = 6,
                                                         n.iter = 100,
                                                         make_figures = T)
+filtered_greater_50 <- filter(med_hex_forest_analysis, study_area_ha >= 0.5* max(study_area_ha))
+#overwrite the file with this filtered data
+st_write(filtered_greater_50, "data/outputs/med_grids/med_hex_forested/!summaries/med_hex_forested.gpkg", append = FALSE)
+set.seed(1)
+med_hex_analysis <- Calculate_fire_regime_and_departure("data/landscape_data/LF2020_BPS_220_CONUS/tif/LC20_BPS_220.tif",
+                                                        "data/landscape_data/LF2020_BPS_220_CONUS/CSV_data/LF20_BPS_220.csv",
+                                                        "data/all_fires",
+                                                        boundaries,
+                                                        "data/landscape_data/mtbs_perims/mtbs_cleaned.shp",
+                                                        "data/outputs/med_grids/med_hex_all",
+                                                        "hex_ID",
+                                                        "med_hex",
+                                                        write_year_raster_out = T,
+                                                        n.cores = 6,
+                                                        n.iter = 100)
+
+
+
 
 # boundaries <- st_read("data/masks/cleaned/med_bps_grid.shp")
 # set.seed(1)
@@ -88,7 +94,7 @@ miller_thode_med_hex <- Calculate_fire_regime_and_departure("data/landscape_data
 
 # repeated runs
 runs <- c("one","two","three","four","five","six","seven","eight","nine","ten")
-paths <- paste0("data/outputs/med_grids/sensitivity/",runs)
+paths <- paste0("data/outputs/med_grids/sensitivity/repeated_runs/",runs)
 med_hex_run_sensitivity <- vector("list", length(paths))
 for (i in seq_along(paths)) {
   med_hex_run_sensitivity[[i]] <- Calculate_fire_regime_and_departure("data/landscape_data/LF2020_BPS_220_CONUS/tif/LC20_BPS_220.tif",
@@ -170,3 +176,5 @@ for (i in seq_along(paths)) {
   gc()
 }
 saveRDS(med_hex_p_areas, "data/outputs/med_grids/sensitivity/med_hex_p_areas.rds")
+
+

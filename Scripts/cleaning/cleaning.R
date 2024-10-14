@@ -1,10 +1,6 @@
-pkgs <- c("sf", "tidyverse", "terra","RColorBrewer", "tmap", "units")
+pkgs <- c("sf", "tidyverse", "terra","RColorBrewer", "tmap", "units", "doParallel", "foreach")
 invisible(lapply(pkgs, library, character.only = T))
 
-wildernesses <- st_read("data/masks/raw/wilderness.shp")
-wildernesses$DispN <- gsub(" Wilderness","", wildernesses$NAME1)
-
-st_write(wildernesses, "data/masks/cleaned/wilderness_cleaned.shp", append = F)
 
 states <- st_read("data/masks/raw/na_states_aea.shp")
 
@@ -22,7 +18,53 @@ fire_year <- foreach(j = 1:length(fire_str), .errorhandling = "pass", .combine =
   return(year)
 }
 mtbs$Fire_Year <- as.numeric(fire_year)
-st_write(mtbs,"data/landscape_data/mtbs_perims/mtbs_cleaned.shp", append = F)
+st_write(mtbs,"data/landscape_data/mtbs_perims/mtbs_cleaned.shp", layer_options = "ENCODING=UTF-8", append = F)
+# wilderness
+wildernesses <- st_read("data/masks/raw/wilderness.shp") %>%
+  mutate(NAME1 = ifelse((STATE == "AZ")& (NAME1 == "Hells Canyon Wilderness"),"Hells Canyon Wilderness-AZ",NAME1),
+         NAME1 = ifelse(str_detect(NAME1,"Bosque"),"Bosque del Apache",NAME1)) %>%
+  select(NAME1) %>%
+  group_by(NAME1) %>%
+  summarize()
+wildernesses$DispN <- gsub(" Wilderness","", wildernesses$NAME1)
+
+
+st_write(wildernesses, "data/masks/cleaned/wilderness_cleaned.shp", append = F)
+
+# create protected areas
+
+NPS <- st_read("data/masks/raw/NPS_-_Land_Resources_Division_Boundary_and_Tract_Data_Service.shp") %>%
+  rename( NAME1 = "UNIT_NAME") %>%
+  select(all_of(c( "NAME1")) ) %>%
+  st_transform(crs = st_crs(wildernesses)) %>%
+  filter(str_detect(NAME1, "National Park")) %>%
+  group_by(NAME1) %>%
+  summarize()
+NPS$DispN <- gsub(" National.*","", NPS$NAME1) #%>%
+  # gsub(" Memorial.*","", .) %>%
+  # gsub(" Mountain Park","", .) %>%
+  # gsub(" Ecological and Historic Preserve","", .) %>%
+  # gsub(" Scenic and Recreational River","", .)
+st_write(NPS, "data/masks/cleaned/NPS_cleaned.shp", append = F)
+
+protected_areas <- bind_rows(wildernesses, NPS) %>%
+  group_by(DispN) %>% 
+  summarize()
+st_write(protected_areas, "data/masks/cleaned/protected_areas.shp", append = F)
+
+#NPS and wilderness mask
+protected_areas <- vect("data/masks/cleaned/protected_areas.shp") %>%
+  project("EPSG:5070")
+wna_states <- vect("data/masks/cleaned/wna_states.shp") %>%
+  project(crs(protected_areas))
+protected_areas_crop_wna <- crop(protected_areas, states_subset)
+protected_areas_crop_wna$protected <- 1
+
+protected_areas_mask <- rast(protected_areas_crop_wna, vals = 0, res = 30) %>%
+  terra::rasterize(protected_areas_crop_wna, ., field = "protected", fun = "min", background = 0)
+writeRaster(protected_areas_mask, "data/masks/cleaned/protected_areas_mask.tif", overwrite = T)
+
+
 
 #create BPS polygon
 
@@ -187,4 +229,5 @@ project_areas <- st_read("data/masks/raw/firesheds/Data/Firesheds_CONUS.gdb", la
 
 writeVector(fireshed, "data/masks/cleaned/fs_fireshed.gpkg", overwrite = T)
 writeVector(project_areas, "data/masks/cleaned/fs_project_areas.gpkg", overwrite = T)
+
 

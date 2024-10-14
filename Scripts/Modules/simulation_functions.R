@@ -22,7 +22,7 @@
 
 
 #years we want to investigate
-year_caps <- c(1985,2020)
+year_caps <- c(1985,2021)
 #the range of these years
 year_range <- year_caps[2]-year_caps[1]
 

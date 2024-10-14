@@ -1,0 +1,64 @@
+---
+title: "EMD_sensitivity"
+format: html
+---
+# Initialize probability density
+```{r}
+library(transport)
+library(tidyverse)
+
+#generate trucated beta distributed data from 0-3
+set.seed(123)
+n <- 1000
+data1 <- rbeta(n, 1, 5) * 3
+data2 <- rbeta(n, 5, 1) * 3
+
+df <- data.frame(data1 = data1, data2 = data2) 
+df_long <- df %>%
+  pivot_longer(cols = c(data1, data2), names_to = "variable", values_to = "value")
+
+```
+
+# Plot the density
+```{r}
+ggplot(df_long, aes(x = value, fill = variable)) +
+  geom_density(alpha = 0.5) +
+  scale_fill_manual(values = c("blue", "red")) +
+  theme_minimal()
+```
+
+# Split data into 16 bins
+
+```{r}
+bins <- seq(0,3,length = 16)
+df16 <- df %>%
+  mutate(bin1 = cut(data1, breaks = bins, labels = FALSE) * bins[2],
+         bin2 = cut(data2, breaks = bins, labels = FALSE) *bins [2])
+  
+
+```
+
+# Split data into 10 bins
+
+```{r}
+bins = seq(0,3,length = 10)
+df10 <- df %>%
+  mutate(bin1 = cut(data1, breaks = bins, labels = FALSE) * bins[2],
+         bin2 = cut(data2, breaks = bins, labels = FALSE) *bins [2])
+  
+
+```
+
+
+# Compute EMD for 16 bins
+```{r}
+emd16 <- wasserstein1d(df16$bin1, df16$bin2)
+emd16
+```
+# Compute EMD for 10 bins
+```{r}
+emd10 <- wasserstein1d(df10$bin1, df10$bin2)
+emd10
+```
+This is a neglible difference. So long as you have enough bins to capture the distribution accurately, you're good. When in doubt, more bins will fit the data more.
+
