@@ -2,7 +2,7 @@
 pkgs <- c("data.table")
 invisible(lapply(pkgs, library, character.only = T))
 
-source("scripts\\modules\\simulation_functions.R")
+source("src/modules/simulations/simulation_functions.R")
 #This function creates frequency distributions
 create_frequency_distributions <- function(contemporary_sample_freq, #this iterations extraced contemporary frequencies
                                            historical_sample #this iterations sampled historical data

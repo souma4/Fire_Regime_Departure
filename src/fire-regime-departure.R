@@ -4,7 +4,7 @@ pkgs <- c(
   "data.table", "sampling", "transport"
 )
 invisible(lapply(pkgs, library, character.only = T))
-source("scripts/analysis/fire-regime-departure_helpers.R")
+source("src/Modules/utils/fire-regime-departure_helpers.R")
 #### LINKS TO PACKAGE DOCUMENTATION
 # https://cran.r-project.org/web/packages/foreach/vignettes/foreach.html   #foreach vignette
 # https://cran.r-project.org/web/packages/foreach/foreach.pdf               #foreach
@@ -17,6 +17,7 @@ source("scripts/analysis/fire-regime-departure_helpers.R")
 # https://cran.r-project.org/web/packages/RColorBrewer/RColorBrewer.pdf    #RColorBrewer
 # https://cran.r-project.org/web/packages/data.table/data.table.pdf        #data.table
 # https://cran.r-project.org/web/packages/data.table/vignettes/datatable-intro.html #data.table vignette
+
 
 
 
@@ -104,8 +105,8 @@ Calculate_fire_regime_and_departure <- function(bps_rast_path, # Path to your BP
 
   ) %dopar% {
     # source all of the relevant functions. MUST DO WITHIN LOOP
-    module_path <- "scripts/modules/"
-    module_names <- list.files(module_path)
+    module_path <- "src/Modules/"
+    module_names <- list.files(module_path, recursive = T)
     source_paths <- paste0(module_path, module_names)
 
     invisible(lapply(source_paths, source))
