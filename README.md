@@ -1,5 +1,5 @@
 # Fire Regime Departure
-[![Wiki]([https://img.shields.io/badge/Wiki](https://img.shields.io/website?url=https%3A%2F%2Fgithub.com%2Fsouma4%2FFire_Regime_Departure%2Fwiki&label=Wiki))](https://github.com/souma4/Fire_Regime_Departure/wiki)
+[![Website](https://img.shields.io/website?url=https%3A%2F%2Fgithub.com%2Fsouma4%2FFire_Regime_Departure%2Fwiki&label=Wiki)](https://github.com/souma4/Fire_Regime_Departure/wiki)
 
 
 Currently Version 1.1. All the code is stable.
