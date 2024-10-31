@@ -168,8 +168,9 @@ Calculate_fire_regime_and_departure <- function(bps_rast_path, # Path to your BP
       dir.create(figure_folder, showWarnings = F)
     }
     # unwrap and crop to our landscape of interest
-    bps <- terra::unwrap(bps)
-    bps_mask <- terra::crop(bps, mask, mask = T)
+    bps_mask <- terra::unwrap(bps)
+    window(bps_mask) <- ext(mask)
+      bps_mask <- terra::mask(bps_mask, mask)
     # create buffer of fire perims
     buffer_sv <- terra::buffer(perims, buffer_tune)
     # data frame of fire year and event_ID
@@ -259,9 +260,9 @@ Calculate_fire_regime_and_departure <- function(bps_rast_path, # Path to your BP
         terra::subst(NA, 0) %>%
         as.factor()
       levels(ave_sev) <- data.frame(value = c(0, 1, 2, 3), label = c("Unburned", "Low", "Mixed", "High"))
-      sev_map_colorPalette <- c("#006600", "#00ffff", "#ffff00", "#ff0000")
+      sev_map_colorPalette <- data.frame(value = c(0,1,2,3), color = c("#006600", "#00ffff", "#ffff00", "#ff0000"))
       coltab(ave_sev) <- sev_map_colorPalette
-      writeRaster(ave_sev, paste0(figure_folder, "/average_severity_map_", dir_name, ".tiff"), filetype = "GTiff", overwrite = T)
+      writeRaster(ave_sev, paste0(figure_folder, "/average_severity_map_", dir_name, ".tiff"), filetype = "GTiff", overwrite = T, datatype = "INT1U")
     }
     rm(ave_sev, sev_map_colorPalette)
     #
@@ -308,8 +309,8 @@ Calculate_fire_regime_and_departure <- function(bps_rast_path, # Path to your BP
       freq_map_length <- terra::minmax(filter_data$freq_map)[2] - terra::minmax(filter_data$freq_map)[1]
 
       freq_map_colorPalette <- c("white", freq_map_colorPalette[1:freq_map_length])
-      coltab(filter_data$freq_map) <- freq_map_colorPalette
-      writeRaster(filter_data$freq_map, paste0(figure_folder, "/fire_frequency_map_", dir_name, ".tiff"), filetype = "GTiff", overwrite = T)
+      coltab(filter_data$freq_map) <- data.frame(0:freq_map_length, freq_map_colorPalette)
+      writeRaster(filter_data$freq_map, paste0(figure_folder, "/fire_frequency_map_", dir_name, ".tiff"), filetype = "GTiff", overwrite = T, datatype = "INT1U")
 
       #
       # pdf(file = paste0(figure_folder,"/frequency_map_",dir_name,".pdf"), width = 1920, height = 1080, pointsize = 20)
