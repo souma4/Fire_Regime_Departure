@@ -1,4 +1,4 @@
-source("scripts/fire-regime-departure.R")
+source("src/fire-regime-departure.R")
 pkgs <- c("sampling","tidyverse", "terra", "sf", "foreach", "doParallel", "units")
 invisible(lapply(pkgs, library, character.only = T))
 boundaries <- st_read("data/masks/cleaned/med_bps_hex.shp")
@@ -27,6 +27,9 @@ med_hex_forest_analysis <- Calculate_fire_regime_and_departure("data/landscape_d
 filtered_greater_50 <- filter(med_hex_forest_analysis, study_area_ha >= 0.5* max(study_area_ha))
 #overwrite the file with this filtered data
 st_write(filtered_greater_50, "data/outputs/med_grids/med_hex_forested/!summaries/med_hex_forested.gpkg", append = FALSE)
+
+
+
 set.seed(1)
 med_hex_analysis <- Calculate_fire_regime_and_departure("data/landscape_data/LF2020_BPS_220_CONUS/tif/LC20_BPS_220.tif",
                                                         "data/landscape_data/LF2020_BPS_220_CONUS/CSV_data/LF20_BPS_220.csv",
@@ -178,3 +181,23 @@ for (i in seq_along(paths)) {
 saveRDS(med_hex_p_areas, "data/outputs/med_grids/sensitivity/med_hex_p_areas.rds")
 
 
+# THIS REQUIRES A SOURCE CODE CHANGE IN src/modules/simulation_functions.R
+set.seed(1)
+# completed: low_low, low_high, high_high, high_low
+med_hex_threshold_sensitivity <- Calculate_fire_regime_and_departure("data/landscape_data/LF2020_BPS_220_CONUS/tif/LC20_BPS_220.tif",
+                                                        "data/landscape_data/LF2020_BPS_220_CONUS/CSV_data/LF20_BPS_220.csv",
+                                                        "data/all_fires",
+                                                        boundaries,
+                                                        "data/landscape_data/mtbs_perims/mtbs_cleaned.shp",
+                                                        "data/outputs/med_grids/sensitivity/low_low",
+                                                        "hex_ID",
+                                                        "med_hex_high_low",
+                                                        write_year_raster_out = "memory",
+                                                        forestFilter = forest,
+                                                        ndvi_threshold = 0.35,
+                                                        n.cores = 4,
+                                                        n.iter = 100,
+                                                        make_figures = F)
+filtered_greater_50 <- filter(med_hex_sensitivity, study_area_ha >= 0.5* max(study_area_ha))
+#overwrite the file with this filtered data
+st_write(filtered_greater_50, "data/outputs/med_grids/sensitivity/low_low/!summaries/med_hex_high_low.gpkg", append = FALSE)
