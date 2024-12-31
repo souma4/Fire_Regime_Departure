@@ -24,7 +24,7 @@
 #years we want to investigate
 year_caps <- c(1985,2021)
 #the range of these years
-year_range <- year_caps[2]-year_caps[1]
+year_range <- year_caps[2]-year_caps[1] +1 #add one to include the last year
 
 #Function performs two functions (i know, it was a mistake) Both are classifying fire severity
 #if classify = F (default), x should be left default
