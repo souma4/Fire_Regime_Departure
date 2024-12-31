@@ -74,9 +74,18 @@ Calculate_fire_regime_and_departure <- function(bps_rast_path, # Path to your BP
     unique() %>%
     unlist()
 
-  # load fire perimeters
+  # load fire perimeters, handle vect, sf or path
+  if (inherits(fire_polygon_path, "SpatVector")) {
+    fire_perim_all <- fire_polygon_path %>%
+      terra::project(crs(bps))
+  } else if (inherits(fire_polygon_path, "sf")) {
+    fire_perim_all <- fire_polygon_path %>%
+      terra::vect() %>%
+      terra::project(crs(bps))
+  } else {
   fire_perim_all <- vect(fire_polygon_path) %>%
     terra::project(crs(bps))
+  }
   # wrap for parrallelization
   bps <- terra::wrap(bps)
   fire_perim_all <- terra::wrap(fire_perim_all)
