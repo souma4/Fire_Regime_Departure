@@ -74,9 +74,18 @@ Calculate_fire_regime_and_departure <- function(bps_rast_path, # Path to your BP
     unique() %>%
     unlist()
 
-  # load fire perimeters
+  # load fire perimeters, handle vect, sf or path
+  if (inherits(fire_polygon_path, "SpatVector")) {
+    fire_perim_all <- fire_polygon_path %>%
+      terra::project(crs(bps))
+  } else if (inherits(fire_polygon_path, "sf")) {
+    fire_perim_all <- fire_polygon_path %>%
+      terra::vect() %>%
+      terra::project(crs(bps))
+  } else {
   fire_perim_all <- vect(fire_polygon_path) %>%
     terra::project(crs(bps))
+  }
   # wrap for parrallelization
   bps <- terra::wrap(bps)
   fire_perim_all <- terra::wrap(fire_perim_all)
@@ -292,7 +301,7 @@ Calculate_fire_regime_and_departure <- function(bps_rast_path, # Path to your BP
         )
       }, error = function(e) {
         m <- structure(
-          list(message = paste0(e, "\nMask:", name_unit, "\nThis happens when you have < 1000 pixels to draw from. LOW SAMPLE AREA")),
+          list(message = paste0( "Mask:", name_unit, "\nThis happens when you have < 1000 pixels to draw from. LOW SAMPLE AREA\n",e)),
           .Names = c("message"),
           class = c("error")
         )
@@ -868,7 +877,7 @@ Calculate_fire_regime_and_departure <- function(bps_rast_path, # Path to your BP
         if (completed.freq <= n.lines & make_figures == TRUE) {
           dx <-sort(unique(dfrequency$freq_dat$freq))
           dx <- dx[2] - dx[1]
-          dx <- if (dx == 0) 1 else dx
+          dx <- if (dx == 0 | is.na(dx)) 1 else dx
           
           freq_dat_4plot <- dfrequency$freq_dat %>%
             as.data.frame() %>%
@@ -964,7 +973,7 @@ Calculate_fire_regime_and_departure <- function(bps_rast_path, # Path to your BP
         if (completed.freq <= n.lines & make_figures == TRUE) {
           dx <-sort(unique(dfrequency$freq_dat$freq))
           dx <- dx[2] - dx[1]
-          dx <- if (dx == 0) 1 else dx
+          dx <- if (dx == 0 | is.na(dx)) 1 else dx
           
           freq_dat_4plot <- dfrequency$freq_dat %>%
             mutate(
